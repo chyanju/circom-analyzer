@@ -1,0 +1,19 @@
+(set-logic QF_AUFBV )
+(declare-fun in () (Array (_ BitVec 32) (_ BitVec 8) ) )
+(declare-fun out () (Array (_ BitVec 32) (_ BitVec 8) ) )
+(declare-fun model_version () (Array (_ BitVec 32) (_ BitVec 8) ) )
+(assert
+(let (( P1 (and  (and  (=  (_ bv1 32) (concat  (select  model_version (_ bv3 32) ) (concat  (select  model_version (_ bv2 32) ) (concat  (select  model_version (_ bv1 32) ) (select  model_version (_ bv0 32) ) ) ) ) ) (=  false (=  (_ bv0 32) (concat  (select  in (_ bv3 32) ) (concat  (select  in (_ bv2 32) ) (concat  (select  in (_ bv1 32) ) (select  in (_ bv0 32) ) ) ) ) ) ) ) (=  (_ bv0 32) (concat  (select  out (_ bv3 32) ) (concat  (select  out (_ bv2 32) ) (concat  (select  out (_ bv1 32) ) (select  out (_ bv0 32) ) ) ) ) ) ) ))
+
+(let (( P2 (and  (and  (=  (_ bv1 32) (concat  (select  model_version (_ bv3 32) ) (concat  (select  model_version (_ bv2 32) ) (concat  (select  model_version (_ bv1 32) ) (select  model_version (_ bv0 32) ) ) ) ) ) (=  (_ bv0 32) (concat  (select  in (_ bv3 32) ) (concat  (select  in (_ bv2 32) ) (concat  (select  in (_ bv1 32) ) (select  in (_ bv0 32) ) ) ) ) ) ) (=  (_ bv1 32) (concat  (select  out (_ bv3 32) ) (concat  (select  out (_ bv2 32) ) (concat  (select  out (_ bv1 32) ) (select  out (_ bv0 32) ) ) ) ) ) ) ))
+
+(let (( SP (=  (_ bv0 32) (bvmul (concat  (select  in (_ bv3 32) ) (concat  (select  in (_ bv2 32) ) (concat  (select  in (_ bv1 32) ) (select  in (_ bv0 32) ) ) ) ) (concat  (select  out (_ bv3 32) ) (concat  (select  out (_ bv2 32) ) (concat  (select  out (_ bv1 32) ) (select  out (_ bv0 32) ) ) ) ) ) )))
+
+
+(and (or P1 P2) SP)
+
+))))
+
+(check-sat)
+(get-model)
+(exit)
