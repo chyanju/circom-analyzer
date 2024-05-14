@@ -1,5 +1,4 @@
 import sys
-from Listener import Listener
 from common import *
 from CircomType import CircomTemplate
 from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
