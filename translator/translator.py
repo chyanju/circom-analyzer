@@ -1,12 +1,42 @@
 import sys
 from Listener import Listener
+from common import *
+from CircomType import CircomTemplate
 from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
 sys.path.append('..')
 from CircomLexer import CircomLexer
 from CircomParser import CircomParser
 
+def write(template:CircomTemplate, file_name:str):
+    compute = open(file_name + '_compute.c', 'w')
+    constraint = open(file_name + '_constraint.c', 'w')
+
+    header = '''// AUTO GENERATED
+#include <stdio.h>
+#include <stdbool.h>
+#include <klee/klee.h>
+unsigned long long constant = 2188824287183927;
+
+
+int main(int argc, char** argv) {
+
+    '''
+    compute.write(header)
+    constraint.write(header)
+
+    for s in template.statement:
+        compute.write(s.to_compute())
+        constraint.write(s.to_constraint())
+    
+    end = '''return 0;
+}
+'''
+    compute.write(end)
+    constraint.write(end)
+    compute.close()
+    constraint.close()
+
 def main():
-    # Load the Circom program
     if (len(sys.argv) != 2):
         print('Enter file name!')
         return
@@ -14,18 +44,18 @@ def main():
     file_name = sys.argv[1]
     input_stream = FileStream(file_name)
     
-    # Lexing
-    lexer = CircomLexer(input_stream)
-    stream = CommonTokenStream(lexer)
-    
-    # Parsing
-    parser = CircomParser(stream)
-    tree = parser.program()  # Start parsing at the 'file' rule
-    # Print the parse tree (for demonstration)
-    print(tree.toStringTree(recog=parser))
+    json_tree = tree2json(input_stream)
+    template = None
 
-    walker = ParseTreeWalker()
-    walker.walk(Listener(file_name), tree)
+    for i in json_tree:
+        match i:
+            case ['definition', definition]:
+                template = CircomTemplate.from_json(definition)
+    
+    # for s in template.statement:
+    #     print(s)
+    
+    write(template, file_name)
 
 if __name__ == '__main__':
     main()
