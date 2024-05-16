@@ -28,5 +28,4 @@ def tree2json(input_stream):
     stream = CommonTokenStream(lexer)
     parser = CircomParser(stream)
     tree = parser.program()
-    # print(tree.toStringTree(recog=parser))
     return Trees.toJsonTree(tree, None, parser)

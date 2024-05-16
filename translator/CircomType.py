@@ -44,6 +44,7 @@ class Opcode(Enum):
     XOR_BITEQ = 41
     INCREMENT = 42
     DECREMENT = 43
+    ARR = 44
 
 def dispatchExpression(node):
     if node[0] == 'expression0':
@@ -110,17 +111,30 @@ class CircomTemplate:
                         case ['statement3', ['statement', ['statement0', ['statement1', constraint]]]]:
                             stmt.append(CircomConstraintEq.from_json(constraint))
                         case _:
-                            print('unhandled case!')
-                            print(s)
+                            raise NotImplementedError(f'Unhandled case: {s}')
+                return CircomTemplate(name, stmt)
+            case ['templateDefinition', 'template', name, '(', arg, ')', block]:
+                stmt = []
+                for s in block[2:-1]:
+                    match s:
+                        case ['statement3', ['declaration', *_], ';']:
+                            stmt.append(CircomDeclaration.from_json(s[1]))
+                        case ['statement3', ['statement', ['statement0', ['statement1', ['statement2', ['substition', *_], ';']]]]]:
+                            stmt.append(CircomSubstitution.from_json(s[1][1][1][1]))
+                        case ['statement3', ['statement', ['statement0', ['statement1', constraint]]]]:
+                            stmt.append(CircomConstraintEq.from_json(constraint))
+                        case _:
+                            raise NotImplementedError(f'Unhandled case: {s}')
                 return CircomTemplate(name, stmt)
             case _:
-                print('Not a template node')
+                raise NotImplementedError(f'Not a template node: {node}')
 
 class CircomDeclaration(CircomNode):
-    def __init__(self, type:bool, name:str):
+    def __init__(self, type:bool, name:str, arr:bool=False, size:str=''):
         self.type = type # True = input, False = output
         self.name = name
-        # print(self.name, self.type)
+        self.arr = arr
+        self.size = size
     
     def from_json(node):
         match node:
@@ -129,40 +143,55 @@ class CircomDeclaration(CircomNode):
                     return CircomDeclaration(True, name)
                 else:
                     return CircomDeclaration(False, name)
+            case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                match arrdef:
+                    case ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                        size = dispatchExpression(expr)
+                        assert size.terminal, f'array error: {size.label} in {node}'
+                        # assert size.terminal and size.label.isdigit(), f'array error: {size.label} in {node}'
+                        if type == 'input':
+                            return CircomDeclaration(True, name, True, size.label)
+                        else:
+                            return CircomDeclaration(False, name, True, size.label)
+                    case _:
+                        raise NotImplementedError(f'Not an array declaration node: {node}')
             case _:
-                raise NotImplementedError('Not a declaration node')
-    
+                raise NotImplementedError(f'Not a declaration node: {node}')
+
     def to_compute(self):
-        if self.type:
-            return f'''int {self.name};
+        if not self.arr:
+            if self.type:
+                return f'''int {self.name};
     klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
     klee_assume({self.name} >= 0);
 
     '''
-        else:
-            return f'''int {self.name};
+            else:
+                return f'''int {self.name};
     klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
+
+    '''
+        else:
+            if self.type:
+                return f'''int {self.name}[{self.size}];
+    klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
+    for (int i=0; i<{self.size}; i++)
+        klee_assume({self.name}[i] >= 0);
+
+    '''
+            else:
+                return f'''int {self.name}[{self.size}];
+    klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
 
     '''
 
     def to_constraint(self):
-        if self.type:
-            return f'''int {self.name};
-    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
-    klee_assume({self.name} >= 0);
-
-    '''
-        else:
-            return f'''int {self.name};
-    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
-
-    '''
+        return self.to_compute()
 
 class CircomVar(CircomNode):
     def __init__(self, label:str):
         self.terminal = True
         self.label = label
-        # print(f'Var: {self.label}')
     
     def to_c_code(self):
         return self.label
@@ -174,7 +203,6 @@ class CircomInstruction(CircomNode):
         self.op2 = op2
         self.op3 = op3
         self.opcode = opcode
-        # print(f'Instruction: {self.opcode}, {self.op1}, {self.op2}, {self.op3}')
 
 class CircomSubstitution(CircomInstruction):
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -193,27 +221,33 @@ class CircomSubstitution(CircomInstruction):
                 op2 = dispatchExpression(rhs)
                 return CircomSubstitution(opcode=op, op1=op1, op2=op2)
             case _:
-                raise NotImplementedError('Not a substitution node')
+                raise NotImplementedError(f'Not a substitution node: {node}')
     
     def to_compute(self):
+        line = ''
         if self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL or self.opcode == Opcode.ASSIGN_SIGNAL:
             if isinstance(self.op2, CircomTernary):
                 return self.op2.to_c_code(self.op1)
-
-            return f'''klee_assume({self.op1.to_c_code()} == {self.op2.to_c_code()});
+            elif isinstance(self.op2, CircomMulDiv) and self.op2.opcode == Opcode.DIV:
+                line = f'''klee_assume({self.op2.op2.to_c_code()} != 0);
+    '''
+            line += f'''klee_assume({self.op1.to_c_code()} == {self.op2.to_c_code()});
 
     '''
-        return ''
+        return line
     
     def to_constraint(self):
+        line = ''
         if self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL:
             if isinstance(self.op2, CircomTernary):
                 return self.op2.to_c_code(self.op1)
-
-            return f'''klee_assume({self.op1.to_c_code()} == {self.op2.to_c_code()});
+            elif isinstance(self.op2, CircomMulDiv) and self.op2.opcode == Opcode.DIV:
+                line = f'''klee_assume({self.op2.op2.to_c_code()} != 0);
+    '''
+            line += f'''klee_assume({self.op1.to_c_code()} == {self.op2.to_c_code()});
 
     '''
-        return ''
+        return line
 
 class CircomConstraintEq(CircomInstruction):
     def __init__(self, op1:CircomNode, op2:CircomNode):
@@ -221,7 +255,7 @@ class CircomConstraintEq(CircomInstruction):
     
     def from_json(node):
         if node[2] != '===':
-            raise NotImplementedError('Not a constraint equality node')
+            raise NotImplementedError(f'Not a constraint equality node: {node}')
         
         op1 = dispatchExpression(node[1][1][1])
         op2 = dispatchExpression(node[3][1][1])
@@ -244,7 +278,7 @@ class CircomTernary(CircomInstruction): # expression13
                 op3 = dispatchExpression(false)
                 return CircomTernary(op1, op2, op3)
             case _:
-                raise NotImplementedError('Not a ternary node')
+                raise NotImplementedError(f'Not a ternary node: {node}')
 
     def to_c_code(self, lhs:CircomNode):
         return f'''if {self.op1.to_c_code()} klee_assume({lhs.to_c_code()} == {self.op2.to_c_code()});
@@ -285,7 +319,7 @@ class CircomCompare(CircomInstruction): #expression10
                 op2 = dispatchExpression(rhs)
                 return CircomCompare(opcode=op, op1=op1, op2=op2)
             case _:
-                raise NotImplementedError('Not a compare node')
+                raise NotImplementedError(f'Not a compare node: {node}')
     
     def to_c_code(self):
         op_str = ''
@@ -320,8 +354,31 @@ class CircomShift(CircomInstruction): #expression6
         print('In Shift')
 
 class CircomAddSub(CircomInstruction): #expression5
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+    
     def from_json(node):
-        print('In Add Sub')
+        match node:
+            case ['expression5', lhs, ['addSubOp', opcode], rhs]:
+                op = None
+                match opcode:
+                    case '+':
+                        op = Opcode.PLUS
+                    case '-':
+                        op = Opcode.MINUS
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return CircomAddSub(opcode=op, op1=op1, op2=op2)
+            case _:
+                raise NotImplementedError(f'Not a add sub node: {node}')
+    
+    def to_c_code(self):
+        op_str = ''
+        if self.opcode == Opcode.PLUS:
+            op_str = '+'
+        elif self.opcode == Opcode.MINUS:
+            op_str = '-'
+        return '(' + self.op1.to_c_code() + ' ' + op_str + ' ' + self.op2.to_c_code() + ')'
 
 class CircomMulDiv(CircomInstruction): #expression4
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -329,9 +386,9 @@ class CircomMulDiv(CircomInstruction): #expression4
 
     def from_json(node):
         match node:
-            case ['expression4', lhs, opcode, rhs]:
+            case ['expression4', lhs, ['mulDivOp', opcode], rhs]:
                 op = None
-                match opcode[1]:
+                match opcode:
                     case '*':
                         op = Opcode.MUL
                     case '/':
@@ -344,7 +401,7 @@ class CircomMulDiv(CircomInstruction): #expression4
                 op2 = dispatchExpression(rhs)
                 return CircomMulDiv(opcode=op, op1=op1, op2=op2)
             case _:
-                raise NotImplementedError('Not a mul div node')
+                raise NotImplementedError(f'Not a mul div node: {node}')
     
     def to_c_code(self):
         op_str = ''
@@ -367,16 +424,30 @@ class CircomPrefix(CircomInstruction): #expression2
         print('In Prefix')
 
 class CircomArr(CircomInstruction): #expression1
+    def __init__(self, op1:str, op2:str):
+        super().__init__(opcode=Opcode.ARR, op1=CircomVar(op1), op2=CircomVar(op2))
+
     def from_json(node):
         print('In Arr')
+
+    def to_c_code(self):
+        return f'{self.op1.label}[{self.op2.label}]'
 
 class CircomTerminal(CircomVar): #expression0
     def from_json(node):
         match node:
             case ['expression0', ['variable', label]]:
                 return CircomVar(label)
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
+                idx = dispatchExpression(expr)
+                # assert idx.terminal and idx.label.isdigit(), f'array error: {idx.label} in {node}'
+                assert idx.terminal, f'array error: {idx.label} in {node}'
+                return CircomArr(label, idx.label)
             case ['expression0', i]:
+                assert isinstance(i, str), f'expression0 error: {i} in {node}'
                 if i.isdigit():
                     return CircomVar(i)
+            case ['expression0', '(', ['expression', ['parseExpression1', expr]], ')']:
+                return dispatchExpression(expr)
             case _:
-                raise NotImplementedError('Not a terminal node')
+                raise NotImplementedError(f'Not a terminal node: {node}')

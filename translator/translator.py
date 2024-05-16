@@ -46,6 +46,8 @@ def main():
     json_tree = tree2json(input_stream)
     template = None
 
+    # print(json_tree)
+
     for i in json_tree:
         match i:
             case ['definition', definition]:
