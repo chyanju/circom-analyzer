@@ -71,8 +71,10 @@ signalSymbol: simpleSymbol | signalConstraintSymbol; // TODO: should this be sim
 
 declaration
   : 'var' '(' (simpleSymbol ',')* simpleSymbol ')' tupleInitialization?
+  | 'var' simpleSymbol tupleInitialization?
   | signalHearder '(' (signalSymbol ',')* signalSymbol ')' tupleInitialization?
   | 'component' '(' (simpleSymbol ',')* simpleSymbol ')' tupleInitialization?
+  | 'component' simpleSymbol tupleInitialization?
   | 'var'  (someSymbol ',')* someSymbol
   | 'component' (someSymbol ',')* someSymbol
   | signalHearder (signalSymbol ',')* signalSymbol
