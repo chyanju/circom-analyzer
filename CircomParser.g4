@@ -81,22 +81,23 @@ declaration
 substition
 	: expression assignOp expression
   | expression '-->' expression
-  | expression '\\=' expression
-  | expression '**=' expression
-  | expression '+=' expression
-  | expression '-=' expression
-  | expression '*=' expression
-  | expression '/=' expression
-  | expression '%=' expression
-  | expression '<<=' expression
-  | expression '>>=' expression
-  | expression '&=' expression
-  | expression '|=' expression
-  | expression '^=' expression
-  | expression '++'
-  | expression '--'
-  | '++' expression
-  | '--' expression;
+  | expression '==>' expression
+  | variable '\\=' expression
+  | variable '**=' expression
+  | variable '+=' expression
+  | variable '-=' expression
+  | variable '*=' expression
+  | variable '/=' expression
+  | variable '%=' expression
+  | variable '<<=' expression
+  | variable '>>=' expression
+  | variable '&=' expression
+  | variable '|=' expression
+  | variable '^=' expression
+  | variable '++'
+  | variable '--'
+  | '++' variable
+  | '--' variable;
 
 block: '{' statement3* '}';
 
