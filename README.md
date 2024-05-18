@@ -12,3 +12,11 @@ python test_circom.py
 ```
 
 The test circom program is in the file `demo.circom`
+
+# To run the translator
+In the translator folder:
+```bash
+python translator.py <path to circom file>
+```
+
+The generated C files will be in the same directory as the circom source file.
