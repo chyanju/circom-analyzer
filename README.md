@@ -29,7 +29,7 @@ The following libraries are required for running (different components of) the t
 
 ## Usage
 
-The library of Vanguard for Aleo provides common vulnerability detectors and basic utilities for writing detectors based on static analysis. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library.
+The library of Circom Analyzer provides a translator from Circom to C and basic utilities for returning public/private/intermediate input/output signal/var for a Circom program. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library.
 
 ### Commandline Executable
 
