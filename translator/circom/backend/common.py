@@ -2,7 +2,6 @@ import sys
 from antlr4 import FileStream, CommonTokenStream, Parser
 from antlr4.Utils import escapeWhitespace
 from antlr4.tree.Trees import Trees, Tree
-sys.path.append('..')
 sys.path.append('../parser/')
 from CircomLexer import CircomLexer
 from CircomParser import CircomParser

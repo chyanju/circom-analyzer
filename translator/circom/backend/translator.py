@@ -2,7 +2,6 @@ import sys
 from common import *
 from CircomType import CircomTemplate, CircomNode
 from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
-sys.path.append('..')
 sys.path.append('../parser/')
 from CircomLexer import CircomLexer
 from CircomParser import CircomParser
