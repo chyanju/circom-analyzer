@@ -1,3 +1,7 @@
+# ======================== #
+# ======== Python ======== #
+# ======================== #
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -158,3 +162,14 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# ===================================== #
+# ======== customized override ======== #
+# ===================================== #
+.DS_Store
+# antlr temp files
+.antlr/
+# exclude aleo build for benchmarks
+!tests/public/**/build/
+# virtual environment
+.venv/

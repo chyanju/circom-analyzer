@@ -2,9 +2,6 @@ import sys
 from common import *
 from CircomType import CircomTemplate, CircomNode
 from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
-sys.path.append('..')
-from CircomLexer import CircomLexer
-from CircomParser import CircomParser
 
 def write(stmt:list[CircomNode], file_name:str):
     compute = open(file_name + '_compute.c', 'w')

@@ -2,9 +2,6 @@ import sys
 from antlr4 import FileStream, CommonTokenStream, Parser
 from antlr4.Utils import escapeWhitespace
 from antlr4.tree.Trees import Trees, Tree
-sys.path.append('..')
-from CircomLexer import CircomLexer
-from CircomParser import CircomParser
 
 # ref: toStringTree method
 #      https://github.com/parrt/antlr4-python3/blob/master/src/antlr4/tree/Trees.py#L48
