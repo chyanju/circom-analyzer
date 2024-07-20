@@ -45,21 +45,43 @@ and if you want to remove it:
 pip uninstall circom-analyzer
 ```
 
-After installation, you can directly use the commandline executable `circom-analyzer` provided and get:
+After installation, you can directly use the commandline executable `circom-analyzer` provided:
 
 ```bash
-test run
+usage: circom-analyzer [-h] [--input INPUT] [--ins] [--outs] [--s] [--v] [--pub] [--pri] [--inter] [--c]
+
+Circom translator that converts Circom to C, with option to return specific signals or variables
+
+options:
+  -h, --help     show this help message and exit
+  --input INPUT  input Circom file path
+  --ins          return input signals
+  --outs         return output signals
+  --s            return all signals
+  --v            return variables
+  --pub          return public signals
+  --pri          return private signals
+  --inter        return intermediate signals
+  --c            generate C files
 ```
 
 #### Example Commands
 
-To run the translator, in the translator folder:
-```bash
-cd ./translator/circom/backend/
-python translator.py <path to circom file>
-```
+- To run the translator and simply generate C files from a Circom file:
+  ```bash
+  circom-analyzer --input ./tests/examples/Decoder/circom/Decoder.circom --c
+  ```
+  The generated C files will be in the same directory as the circom source file.
 
-The generated C files will be in the same directory as the circom source file.
+- To simply return all signals from a Circom file:
+  ```bash
+  circom-analyzer --input ./tests/examples/Decoder/circom/Decoder.circom --s
+  ```
+
+- To run the translator and return all signals from a Circom file:
+  ```bash
+  circom-analyzer --input ./tests/examples/Decoder/circom/Decoder.circom --s
+  ```
 
 ### Calling from Source
 
@@ -96,7 +118,7 @@ In case the parser is not compatible with your environment, you can generate it 
 ```bash
 cd ./translator/circom/parser/
 antlr4 -v 4.13.1 -Dlanguage=Python3 ./CircomLexer.g4 # generate lexer
-antlr4 -v 4.13.1 -Dlanguage=Python3 ./ CircomParser.g4 # generate parser
+antlr4 -v 4.13.1 -Dlanguage=Python3 ./CircomParser.g4 # generate parser
 ```
 
 The parser/lexer file is located in `./translator/circom/parser/CircomLexer.g4` and `./translator/circom/parser/CircomParser.g4`.

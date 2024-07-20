@@ -103,12 +103,12 @@ class CircomTemplate:
         self.name = name
         self.statement = stmt
     
-    def from_json(node, call:list):
+    def from_json(node, call:list, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
         match node:
             case ['templateDefinition', 'template', name, '(', ')', block]:
                 stmt = []
                 for s in block[2:-1]:
-                    stmt.extend(CircomStatement3.from_json(s))
+                    stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
                 return CircomTemplate(name, stmt)
             case ['templateDefinition', 'template', name, '(', arg, ')', block]:
                 stmt = []
@@ -121,16 +121,16 @@ class CircomTemplate:
                         for a in arg:
                             stmt.append(CircomDeclaration(0, a))
                 for s in block[2:-1]:
-                    stmt.extend(CircomStatement3.from_json(s))
+                    stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
                 return CircomTemplate(name, stmt)
             case _:
                 raise NotImplementedError(f'Not a template node: {node}')
 
 class CircomStatement3(CircomNode):
-    def from_json(node):
+    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
         match node:
             case ['statement3', ['declaration', *_], ';']:
-                return CircomDeclaration.from_json(node[1])
+                return CircomDeclaration.from_json(node[1], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             case ['statement3', ['statement', ['statement0', ['statement1', ['statement2', ['substition', *_], ';']]]]]:
                 return CircomSubstitution.from_json(node[1][1][1][1][1])
             case ['statement3', ['statement', ['statement0', ['statement1', constraint]]]]:
@@ -146,18 +146,34 @@ class CircomDeclaration(CircomNode):
         self.size = size
         self.val = val
     
-    def from_json(node):
+    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
         match node:
             case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', name]]]:
                 if type == 'input':
+                    if return_input:
+                        input.append(name)
+                    if return_signal:
+                        signal.append(name)
+                    if return_private:
+                        private.append(name)
                     return [CircomDeclaration(0, name)]
                 else:
+                    if return_output:
+                        output.append(name)
+                    if return_signal:
+                        signal.append(name)
+                    if return_public:
+                        public.append(name)
                     return [CircomDeclaration(1, name)]
             case ['declaration', 'var', ['simpleSymbol', name]]:
+                if return_var:
+                    var.append(name)
                 return [CircomDeclaration(2, name)]
             case ['declaration', 'var', ['simpleSymbol', name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
                 if opcode == '=':
                     rhs = dispatchExpression(expr)
+                    if return_var:
+                        var.append(name)
                     return [CircomDeclaration(2, name, val=rhs)]
                 else:
                     raise NotImplementedError(f'Unhandled assignment: {node}')
@@ -166,8 +182,20 @@ class CircomDeclaration(CircomNode):
                     case ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
                         size = dispatchExpression(expr)
                         if type == 'input':
+                            if return_input:
+                                input.append(name)
+                            if return_signal:
+                                signal.append(name)
+                            if return_private:
+                                private.append(name)
                             return [CircomDeclaration(0, name, True, size.to_c_code())]
                         else:
+                            if return_output:
+                                output.append(name)
+                            if return_signal:
+                                signal.append(name)
+                            if return_public:
+                                public.append(name)
                             return [CircomDeclaration(1, name, True, size.to_c_code())]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')

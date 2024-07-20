@@ -17,7 +17,6 @@ classifiers = [
 dependencies = [
     "antlr4-python3-runtime==4.13.1",
     "antlr4-tools",
-    "tabulate>=0.9.0",
 ]
 
 [build-system]
