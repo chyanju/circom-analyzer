@@ -2,6 +2,10 @@
 
 This repo hosts a translator from Circom to C.
 
+Currently, we don't support intermediate signals in templates. However, we support specifying the public input signals when defining the main component, by providing the list of public input signals. 
+
+For signal arrays, this tool only return the name of the array.
+
 ## Table of Contents
 
 - [Circom Analyzer](#circom-analyzer)

@@ -132,9 +132,9 @@ class CircomStatement3(CircomNode):
             case ['statement3', ['declaration', *_], ';']:
                 return CircomDeclaration.from_json(node[1], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             case ['statement3', ['statement', ['statement0', ['statement1', ['statement2', ['substition', *_], ';']]]]]:
-                return CircomSubstitution.from_json(node[1][1][1][1][1])
+                return CircomSubstitution.from_json(node[1][1][1][1][1], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             case ['statement3', ['statement', ['statement0', ['statement1', constraint]]]]:
-                return CircomStatement2.from_json(constraint)
+                return CircomStatement2.from_json(constraint, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             case _:
                 raise NotImplementedError(f'Not a statement3 node: {node}')
 
@@ -268,7 +268,7 @@ class CircomSubstitution(CircomInstruction):
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
         match node:
             case ['substition', ['expression', ['parseExpression1', lhs]], ['assignOp', opcode], ['expression', ['parseExpression1', rhs]]]:
                 op = None
@@ -397,7 +397,7 @@ class CircomStatement2(CircomInstruction):
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
     
-    def from_json(node):
+    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
         if node[2] == '===':
             op1 = dispatchExpression(node[1][1][1])
             op2 = dispatchExpression(node[3][1][1])
@@ -405,18 +405,18 @@ class CircomStatement2(CircomInstruction):
         elif node[1] == 'for':
             c1 = None
             if node[3][0] == 'substition':
-                c1 = CircomSubstitution.from_json(node[3])
+                c1 = CircomSubstitution.from_json(node[3], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             elif node[3][0] == 'declaration':
-                c1 = CircomDeclaration.from_json(node[3])
+                c1 = CircomDeclaration.from_json(node[3], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             else:
                 raise NotImplementedError(f'Unhandled for condition: {node}')
             c2 = dispatchExpression(node[5][1][1])
-            c3 = CircomSubstitution.from_json(node[7])
+            c3 = CircomSubstitution.from_json(node[7], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
             assert len(c1) == 1, f'error in for condition: {node}'
             assert len(c3) == 1, f'error in for condition: {node}'
             stmt = []
             for s in node[9][1][2:-1]:
-                stmt.extend(CircomStatement3.from_json(s))
+                stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
             return [CircomFor(c1[0], c2, c3[0], stmt)]
         else:
             raise NotImplementedError(f'Not a statement 2 node: {node}')

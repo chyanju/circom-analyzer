@@ -63,6 +63,18 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
                         call.append(template)
                         call.append(expr)
+            case ['mainComponent', 'component', 'main', ['publicList', '{', 'public', '[', arg, ']', '}'], '=', ['expression', ['parseExpression1', body]], ';']:
+                if arg[0] == 'identifierList':
+                    arglst = list(a for a in arg[1:] if a != ',')
+                    public.extend(arglst)
+                match body:
+                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
+                        call.append(template)
+                        call.append(expr)
+            # other case
+            # case _:
+            #     print(i)
+
 
     template = CircomTemplate.from_json(template_def, call, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
     
@@ -77,7 +89,8 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
         # output private signals
         print('Private signals:')
         for s in private:
-            print(s)
+            if s not in public:
+                print(s)
     if return_intermediate:
         # output intermediate signals
         print('Intermediate signals:')
