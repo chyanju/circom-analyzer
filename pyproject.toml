@@ -3,6 +3,7 @@ name = "circom-analyzer"
 version = "0.0.1"
 authors = [
   { name="Youwei Zhong", email="zhongyouwei@sjtu.edu.cn" },
+  { name="Vicki Li", email="q_li@ucsb.edu" },
   { name="Yanju Chen", email="yanju@ucsb.edu" },
 ]
 description = "Circom to C translator"
