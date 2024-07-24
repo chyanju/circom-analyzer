@@ -2,8 +2,6 @@
 
 This repo hosts a translator from Circom to C.
 
-Currently, we don't support intermediate signals in templates. However, we support specifying the public input signals when defining the main component, by providing the list of public input signals. 
-
 For signal arrays, this tool only return the name of the array.
 
 ## Table of Contents
@@ -33,7 +31,7 @@ The following libraries are required for running (different components of) the t
 
 ## Usage
 
-The library of Circom Analyzer provides a translator from Circom to C and basic utilities for returning public/private/intermediate input/output signal/var for a Circom program. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library.
+The library of Circom Analyzer provides a translator from Circom to C and basic utilities for returning public/private/intermediate input/output signal/var for a Circom program. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library. Currently, the tool only supports the first method, you can implement the other two methods yourself following [https://github.com/Veridise/vanguard-aleo/blob/main/README.md](https://github.com/Veridise/vanguard-aleo/blob/main/README.md).
 
 ### Commandline Executable
 
@@ -54,7 +52,7 @@ After installation, you can directly use the commandline executable `circom-anal
 ```bash
 usage: circom-analyzer [-h] [--input INPUT] [--ins] [--outs] [--s] [--v] [--pub] [--pri] [--inter] [--c]
 
-Circom translator that converts Circom to C, with option to return specific signals or variables
+Circom translator that converts Circom to C, with options to output specific signals or variables to a JSON file.
 
 options:
   -h, --help     show this help message and exit
@@ -86,6 +84,34 @@ options:
   ```bash
   circom-analyzer --input ./tests/examples/Decoder/circom/Decoder.circom --s
   ```
+- To run the translator and get all information:
+  ```bash
+  circom-analyzer --input ./tests/examples/IsZero/circom/is-zero.circom --pub --inter --pri --s --ins --outs --v --c
+  ```
+  and you will get whe following JSON file in the same directory as the circom source file:
+  ```json
+  {
+      "public": [
+          "out"
+      ],
+      "private": [
+          "in"
+      ],
+      "intermediate": [],
+      "input": [
+          "in"
+      ],
+      "output": [
+          "out"
+      ],
+      "signal": [
+          "in",
+          "out"
+      ],
+      "var": []
+  }
+  ```
+
 
 ### Calling from Source
 

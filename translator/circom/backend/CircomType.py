@@ -140,7 +140,7 @@ class CircomStatement3(CircomNode):
 
 class CircomDeclaration(CircomNode):
     def __init__(self, type:int, name:str, arr:bool=False, size:str='', val:CircomNode=None):
-        self.type = type # 0 = input, 1 = output, 2 = var
+        self.type = type # 0 = input, 1 = output, 2 = var, 3 = intermediate signals
         self.name = name
         self.arr = arr
         self.size = size
@@ -165,6 +165,12 @@ class CircomDeclaration(CircomNode):
                     if return_public:
                         public.append(name)
                     return [CircomDeclaration(1, name)]
+            case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', name]]]:
+                if return_signal:
+                    signal.append(name)
+                if return_intermediate:
+                    intermediate.append(name)
+                return [CircomDeclaration(3, name)]
             case ['declaration', 'var', ['simpleSymbol', name]]:
                 if return_var:
                     var.append(name)
@@ -199,6 +205,17 @@ class CircomDeclaration(CircomNode):
                             return [CircomDeclaration(1, name, True, size.to_c_code())]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')
+            case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
+                match arrdef:
+                    case ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                        size = dispatchExpression(expr)
+                        if return_signal:
+                            signal.append(name)
+                        if return_intermediate:
+                            intermediate.append(name)
+                        return [CircomDeclaration(3, name, True, size.to_c_code())]
+                    case _:
+                        raise NotImplementedError(f'Not an array declaration node: {node}')
             case _:
                 raise NotImplementedError(f'Not a declaration node: {node}')
     def to_compute(self):
@@ -210,6 +227,11 @@ class CircomDeclaration(CircomNode):
 
     '''
         elif self.arr and self.type == 1:
+            return f'''int {self.name}[{self.size}];
+    klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
+
+    '''
+        elif self.arr and self.type == 3:
             return f'''int {self.name}[{self.size}];
     klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
 
@@ -227,6 +249,11 @@ class CircomDeclaration(CircomNode):
 
     '''
         elif not self.arr and self.type == 1:
+            return f'''int {self.name};
+    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
+
+    '''
+        elif not self.arr and self.type == 3:
             return f'''int {self.name};
     klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
 

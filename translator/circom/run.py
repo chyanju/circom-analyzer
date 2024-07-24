@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+import json
 
 from .backend.common import *
 from .backend.CircomType import CircomTemplate, CircomNode
@@ -80,48 +81,77 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
     
     # for s in template.statement:
     #     print(s)
+
+    # output the information in JSON format
+    # if return_public:
+    #     # output public signals
+    #     print('Public signals:')
+    #     for s in public:
+    #         print(s)
+    # if return_private:
+    #     # output private signals
+    #     print('Private signals:')
+    #     for s in private:
+    #         if s not in public:
+    #             print(s)
+    # if return_intermediate:
+    #     # output intermediate signals
+    #     print('Intermediate signals:')
+    #     for s in intermediate:
+    #         print(s)
+    # if return_input:
+    #     # output input signals
+    #     print('Input signals:')
+    #     for s in input:
+    #         print(s)
+    # if return_output:
+    #     # output output signals
+    #     print('Output signals:')
+    #     for s in output:
+    #         print(s)
+    # if return_signal:
+    #     # output all signals
+    #     print('Signals:')
+    #     for s in signal:
+    #         print(s)
+    # if return_var:
+    #     # output variables
+    #     print('Variables:')
+    #     for s in var:
+    #         print(s)
+    data = {}
     if return_public:
         # output public signals
-        print('Public signals:')
-        for s in public:
-            print(s)
+        data['public'] = public
     if return_private:
         # output private signals
-        print('Private signals:')
-        for s in private:
-            if s not in public:
-                print(s)
+        data['private'] = [s for s in private if s not in public]
     if return_intermediate:
         # output intermediate signals
-        print('Intermediate signals:')
-        for s in intermediate:
-            print(s)
+        data['intermediate'] = intermediate
     if return_input:
         # output input signals
-        print('Input signals:')
-        for s in input:
-            print(s)
+        data['input'] = input
     if return_output:
         # output output signals
-        print('Output signals:')
-        for s in output:
-            print(s)
+        data['output'] = output
     if return_signal:
         # output all signals
-        print('Signals:')
-        for s in signal:
-            print(s)
+        data['signal'] = signal
     if return_var:
         # output variables
-        print('Variables:')
-        for s in var:
-            print(s)
+        data['var'] = var
+
+    if data:
+        with open(file_name + '_info.json', 'w') as json_file:
+            json.dump(data, json_file, indent=4)
+
     if return_c_files:
         write(template.statement, file_name)
 
 def run():
     # invoke translator/circom/backend/translator.py with arguments
-    ap = argparse.ArgumentParser(description="Circom translator that converts Circom to C, with option to return specific signals or variables")
+    ap = argparse.ArgumentParser(description="Circom translator that converts Circom to C, with options to output specific signals or variables to a JSON file.")
     ap.add_argument("--input", default=None, type=str, help="input Circom file path")
     ap.add_argument("--ins", action='store_true', help="return input signals")
     ap.add_argument("--outs", action='store_true', help="return output signals")
