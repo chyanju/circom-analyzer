@@ -31,7 +31,7 @@ The following libraries are required for running (different components of) the t
 
 ## Usage
 
-The library of Circom Analyzer provides a translator from Circom to C and basic utilities for returning public/private/intermediate input/output signal/var for a Circom program. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library. Currently, the tool only supports the first method, you can implement the other two methods yourself following [https://github.com/Veridise/vanguard-aleo/blob/main/README.md](https://github.com/Veridise/vanguard-aleo/blob/main/README.md).
+The library of Circom Analyzer provides a translator from Circom to C and basic utilities for returning public/private/intermediate input/output signal/var for a Circom program. There are three ways to use and integrate the tool into your workflow, namely: commandline executable, calling from source and calling as library.
 
 ### Commandline Executable
 
@@ -128,7 +128,7 @@ pip install .
 and if you want to remove it:
 
 ```bash
-pip uninstall vanguard
+pip uninstall circom-analyzer
 ```
 
 TODO
