@@ -602,8 +602,34 @@ class CircomPow(CircomInstruction): #expression3
         print('In Pow')
 
 class CircomPrefix(CircomInstruction): #expression2
+    def __init__(self, opcode:Opcode, op1:CircomNode):
+        super().__init__(opcode=opcode, op1=op1)
+        
     def from_json(node):
-        print('In Prefix')
+        match node:
+            case ['expression2', ['expressionPrefixOp', opcode], rhs]:
+                op = None
+                match opcode:
+                    case '-':
+                        op = Opcode.MINUS
+                    case '!':
+                        op = Opcode.NOT
+                    case '~':
+                        op = Opcode.COMPLEMENT
+                op1 = dispatchExpression(rhs)
+                return [CircomPrefix(opcode=op, op1=op1)]
+            case _:
+                raise NotImplementedError(f'Not a prefix node: {node}')
+
+    def to_c_code(self):
+        op_str = ''
+        if self.opcode == Opcode.MINUS:
+            op_str = '-'
+        elif self.opcode == Opcode.NOT:
+            op_str = '!'
+        elif self.opcode == Opcode.COMPLEMENT:
+            op_str = '~'
+        return '(' + op_str + self.op1.to_c_code() + ')'
 
 class CircomListable(CircomInstruction): #expression1
     def __init__(self, op1:str, op2:str):
