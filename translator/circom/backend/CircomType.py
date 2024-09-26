@@ -481,6 +481,9 @@ class CircomOr(CircomInstruction): #expression12
             case _:
                 raise NotImplementedError(f'Not an or node: {node}')
 
+    def to_c_code(self):
+        return '(' + self.op1.to_c_code() + ' || ' + self.op2.to_c_code() + ')'
+
 class CircomAnd(CircomInstruction): #expression11
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
@@ -494,15 +497,18 @@ class CircomAnd(CircomInstruction): #expression11
             case _:
                 raise NotImplementedError(f'Not an and node: {node}')
 
+    def to_c_code(self):
+        return '(' + self.op1.to_c_code() + ' && ' + self.op2.to_c_code() + ')'
+
 class CircomCompare(CircomInstruction): #expression10
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
     def from_json(node):
         match node:
-            case ['expression10', lhs, opcode, rhs]:
+            case ['expression10', lhs, ['cmpOpCodes', opcode], rhs]:
                 op = None
-                match opcode[1]:
+                match opcode:
                     case '==':
                         op = Opcode.EQ
                     case '!=':
@@ -549,6 +555,9 @@ class CircomOrBit(CircomInstruction): #expression9
                 return [CircomOrBit(opcode=Opcode.OR_BIT, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an or bit node: {node}')
+
+    def to_c_code(self):
+        return '(' + self.op1.to_c_code() + ' | ' + self.op2.to_c_code() + ')'
             
 
 class CircomXorBit(CircomInstruction): #expression8
@@ -564,6 +573,9 @@ class CircomXorBit(CircomInstruction): #expression8
             case _:
                 raise NotImplementedError(f'Not an xor bit node: {node}')
 
+    def to_c_code(self):
+        return '(' + self.op1.to_c_code() + ' ^ ' + self.op2.to_c_code() + ')'
+
 class CircomAndBit(CircomInstruction): #expression7
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
@@ -576,6 +588,9 @@ class CircomAndBit(CircomInstruction): #expression7
                 return [CircomAndBit(opcode=Opcode.AND_BIT, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an and bit node: {node}')
+
+    def to_c_code(self):
+        return '(' + self.op1.to_c_code() + ' & ' + self.op2.to_c_code() + ')'
 
 class CircomShift(CircomInstruction): #expression6
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -595,6 +610,14 @@ class CircomShift(CircomInstruction): #expression6
                 return [CircomShift(opcode=op, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a shift node: {node}')
+
+    def to_c_code(self):
+        op_str = ''
+        if self.opcode == Opcode.SHIFTL:
+            op_str = '<<'
+        elif self.opcode == Opcode.SHIFTR:
+            op_str = '>>'
+        return '(' + self.op1.to_c_code() + ' ' + op_str + ' ' + self.op2.to_c_code() + ')'
 
 class CircomAddSub(CircomInstruction): #expression5
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -671,6 +694,9 @@ class CircomPow(CircomInstruction): #expression3
             case _:
                 raise NotImplementedError(f'Not a pow node: {node}')
 
+    def to_c_code(self):
+        return f'pow({self.op1.to_c_code()}, {self.op2.to_c_code()})'
+
 class CircomPrefix(CircomInstruction): #expression2
     def __init__(self, opcode:Opcode, op1:CircomNode):
         super().__init__(opcode=opcode, op1=op1)
@@ -699,7 +725,7 @@ class CircomPrefix(CircomInstruction): #expression2
             op_str = '!'
         elif self.opcode == Opcode.COMPLEMENT:
             op_str = '~'
-        return '(' + op_str + self.op1.to_c_code() + ')'
+        return '(' + ' ' + op_str + ' ' + self.op1.to_c_code() + ')'
 
 class CircomListable(CircomInstruction): #expression1
     def __init__(self, op1:str, op2:str):
