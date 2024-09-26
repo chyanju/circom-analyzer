@@ -469,12 +469,30 @@ class CircomTernary(CircomInstruction): # expression13
     '''
 
 class CircomOr(CircomInstruction): #expression12
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In Or')
+        match node:
+            case ['expression12', lhs, '||', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomOr(opcode=Opcode.OR, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not an or node: {node}')
 
 class CircomAnd(CircomInstruction): #expression11
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In And')
+        match node:
+            case ['expression11', lhs, '&&', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomAnd(opcode=Opcode.AND, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not an and node: {node}')
 
 class CircomCompare(CircomInstruction): #expression10
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -520,20 +538,63 @@ class CircomCompare(CircomInstruction): #expression10
         return '(' + self.op1.to_c_code() + ' ' + op_str + ' ' + self.op2.to_c_code() + ')'
 
 class CircomOrBit(CircomInstruction): #expression9
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In Or Bit')
+        match node:
+            case ['expression9', lhs, '|', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomOrBit(opcode=Opcode.OR_BIT, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not an or bit node: {node}')
+            
 
 class CircomXorBit(CircomInstruction): #expression8
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In Xor Bit')
+        match node:
+            case ['expression8', lhs, '^', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomXorBit(opcode=Opcode.XOR_BIT, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not an xor bit node: {node}')
 
 class CircomAndBit(CircomInstruction): #expression7
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+    
     def from_json(node):
-        print('In And Bit')
+        match node:
+            case ['expression7', lhs, '&', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomAndBit(opcode=Opcode.AND_BIT, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not an and bit node: {node}')
 
 class CircomShift(CircomInstruction): #expression6
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In Shift')
+        match node:
+            case ['expression6', lhs, ['shiftOp', opcode], rhs]:
+                op = None
+                match opcode:
+                    case '<<':
+                        op = Opcode.SHIFTL
+                    case '>>':
+                        op = Opcode.SHIFTR
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomShift(opcode=op, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not a shift node: {node}')
 
 class CircomAddSub(CircomInstruction): #expression5
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -598,8 +659,17 @@ class CircomMulDiv(CircomInstruction): #expression4
         return '(' + self.op1.to_c_code() + ' ' + op_str + ' ' + self.op2.to_c_code() + ')'
 
 class CircomPow(CircomInstruction): #expression3
+    def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
+        super().__init__(opcode=opcode, op1=op1, op2=op2)
+
     def from_json(node):
-        print('In Pow')
+        match node:
+            case ['expression3', lhs, '**', rhs]:
+                op1 = dispatchExpression(lhs)
+                op2 = dispatchExpression(rhs)
+                return [CircomPow(opcode=Opcode.POW, op1=op1, op2=op2)]
+            case _:
+                raise NotImplementedError(f'Not a pow node: {node}')
 
 class CircomPrefix(CircomInstruction): #expression2
     def __init__(self, opcode:Opcode, op1:CircomNode):
