@@ -474,8 +474,11 @@ class CircomOr(CircomInstruction): #expression12
 
     def from_json(node):
         match node:
-            case ['expression12', lhs, '||', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression12', *lhs, '||', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression12', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomOr(opcode=Opcode.OR, op1=op1, op2=op2)]
             case _:
@@ -490,8 +493,11 @@ class CircomAnd(CircomInstruction): #expression11
 
     def from_json(node):
         match node:
-            case ['expression11', lhs, '&&', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression11', *lhs, '&&', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression11', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomAnd(opcode=Opcode.AND, op1=op1, op2=op2)]
             case _:
@@ -506,7 +512,7 @@ class CircomCompare(CircomInstruction): #expression10
 
     def from_json(node):
         match node:
-            case ['expression10', lhs, ['cmpOpCodes', opcode], rhs]:
+            case ['expression10', *lhs, ['cmpOpCodes', opcode], rhs]:
                 op = None
                 match opcode:
                     case '==':
@@ -521,7 +527,10 @@ class CircomCompare(CircomInstruction): #expression10
                         op = Opcode.LE
                     case '>=':
                         op = Opcode.GE
-                op1 = dispatchExpression(lhs)
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression10', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomCompare(opcode=op, op1=op1, op2=op2)]
             case _:
@@ -549,8 +558,11 @@ class CircomOrBit(CircomInstruction): #expression9
 
     def from_json(node):
         match node:
-            case ['expression9', lhs, '|', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression9', *lhs, '|', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression9', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomOrBit(opcode=Opcode.OR_BIT, op1=op1, op2=op2)]
             case _:
@@ -566,8 +578,11 @@ class CircomXorBit(CircomInstruction): #expression8
 
     def from_json(node):
         match node:
-            case ['expression8', lhs, '^', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression8', *lhs, '^', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression8', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomXorBit(opcode=Opcode.XOR_BIT, op1=op1, op2=op2)]
             case _:
@@ -582,8 +597,11 @@ class CircomAndBit(CircomInstruction): #expression7
     
     def from_json(node):
         match node:
-            case ['expression7', lhs, '&', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression7', *lhs, '&', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression7', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomAndBit(opcode=Opcode.AND_BIT, op1=op1, op2=op2)]
             case _:
@@ -598,14 +616,17 @@ class CircomShift(CircomInstruction): #expression6
 
     def from_json(node):
         match node:
-            case ['expression6', lhs, ['shiftOp', opcode], rhs]:
+            case ['expression6', *lhs, ['shiftOp', opcode], rhs]:
                 op = None
                 match opcode:
                     case '<<':
                         op = Opcode.SHIFTL
                     case '>>':
                         op = Opcode.SHIFTR
-                op1 = dispatchExpression(lhs)
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression6', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomShift(opcode=op, op1=op1, op2=op2)]
             case _:
@@ -625,14 +646,17 @@ class CircomAddSub(CircomInstruction): #expression5
     
     def from_json(node):
         match node:
-            case ['expression5', lhs, ['addSubOp', opcode], rhs]:
+            case ['expression5', *lhs, ['addSubOp', opcode], rhs]:
                 op = None
                 match opcode:
                     case '+':
                         op = Opcode.PLUS
                     case '-':
                         op = Opcode.MINUS
-                op1 = dispatchExpression(lhs)
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression5', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomAddSub(opcode=op, op1=op1, op2=op2)]
             case _:
@@ -652,7 +676,7 @@ class CircomMulDiv(CircomInstruction): #expression4
 
     def from_json(node):
         match node:
-            case ['expression4', lhs, ['mulDivOp', opcode], rhs]:
+            case ['expression4', *lhs, ['mulDivOp', opcode], rhs]:
                 op = None
                 match opcode:
                     case '*':
@@ -663,7 +687,10 @@ class CircomMulDiv(CircomInstruction): #expression4
                         op = Opcode.INTDIV
                     case '%':
                         op = Opcode.MOD
-                op1 = dispatchExpression(lhs)
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression4', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomMulDiv(opcode=op, op1=op1, op2=op2)]
             case _:
@@ -687,8 +714,11 @@ class CircomPow(CircomInstruction): #expression3
 
     def from_json(node):
         match node:
-            case ['expression3', lhs, '**', rhs]:
-                op1 = dispatchExpression(lhs)
+            case ['expression3', *lhs, '**', rhs]:
+                if len(lhs) == 1:
+                    op1 = dispatchExpression(lhs[0])
+                else:
+                    op1 = dispatchExpression(['expression3', *lhs])
                 op2 = dispatchExpression(rhs)
                 return [CircomPow(opcode=Opcode.POW, op1=op1, op2=op2)]
             case _:
