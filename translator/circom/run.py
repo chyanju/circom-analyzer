@@ -35,7 +35,7 @@ unsigned long long constant = 2188824287183927;
         constraint.write(t.to_constraint())
         for s in t.statement:
             compute.write(s.to_compute())
-            constraint.write(s.to_compute())
+            constraint.write(s.to_constraint())
         compute.write(return_part)
         constraint.write(return_part)
     if main:
