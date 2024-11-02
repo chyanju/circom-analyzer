@@ -45,45 +45,46 @@ class Opcode(Enum):
     INCREMENT = 42
     DECREMENT = 43
     ARR = 44
+    FIELD = 45
 
-def dispatchExpression(node):
+def dispatchExpression(node, var_type:dict={}):
     if node[0] == 'expression0':
-        ret = CircomTerminal.from_json(node)
+        ret = CircomTerminal.from_json(node, var_type)
         assert len(ret) == 1, f'error in dispatch expression: {node}'
         return ret[0]
     elif len(node) > 2:
         ret = []
         match node:
             case ['expression1', *_]:
-                ret = CircomListable.from_json(node)
+                ret = CircomExpression1.from_json(node, var_type)
             case ['expression2', *_]:
-                ret = CircomPrefix.from_json(node)
+                ret = CircomPrefix.from_json(node, var_type)
             case ['expression3', *_]:
-                ret = CircomPow.from_json(node)
+                ret = CircomPow.from_json(node, var_type)
             case ['expression4', *_]:
-                ret = CircomMulDiv.from_json(node)
+                ret = CircomMulDiv.from_json(node, var_type)
             case ['expression5', *_]:
-                ret = CircomAddSub.from_json(node)
+                ret = CircomAddSub.from_json(node, var_type)
             case ['expression6', *_]:
-                ret = CircomShift.from_json(node)
+                ret = CircomShift.from_json(node, var_type)
             case ['expression7', *_]:
-                ret = CircomAndBit.from_json(node)
+                ret = CircomAndBit.from_json(node, var_type)
             case ['expression8', *_]:
-                ret = CircomXorBit.from_json(node)
+                ret = CircomXorBit.from_json(node, var_type)
             case ['expression9', *_]:
-                ret = CircomOrBit.from_json(node)
+                ret = CircomOrBit.from_json(node, var_type)
             case ['expression10', *_]:
-                ret = CircomCompare.from_json(node)
+                ret = CircomCompare.from_json(node, var_type)
             case ['expression11', *_]:
-                ret = CircomAnd.from_json(node)
+                ret = CircomAnd.from_json(node, var_type)
             case ['expression12', *_]:
-                ret = CircomOr.from_json(node)
+                ret = CircomOr.from_json(node, var_type)
             case ['expression13', *_]:
-                ret = CircomTernary.from_json(node)
-        assert len(ret) == 1, f'error in dispatch expression: {node}'
+                ret = CircomTernary.from_json(node, var_type)
+        assert len(ret) == 1, f'error in dispatch expression: {node, var_type}'
         return ret[0]
     else:
-        return dispatchExpression(node[1])
+        return dispatchExpression(node[1], var_type)
 
 class CircomNode:
     def __init__(self):
@@ -98,121 +99,302 @@ class CircomNode:
     def to_c_code(self):
         return ''
 
+
 class CircomTemplate:
-    def __init__(self, name:str, stmt:list[CircomNode]):
+    def __init__(self, name:str, arg:list, stmt:list[CircomNode], var_type:dict):
         self.name = name
+        self.arg = arg
         self.statement = stmt
+        self.var_type = var_type
     
-    def from_json(node, call:list, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
+    def from_json(node):
         match node:
             case ['templateDefinition', 'template', name, '(', ')', block]:
                 stmt = []
+                var_type = {}
                 for s in block[2:-1]:
-                    stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
-                return CircomTemplate(name, stmt)
+                    match s:
+                        case ['statement3', ['declaration', *_], ';']:
+                            match s[1]:
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    if type == 'input':
+                                        var_type[symbol_name] = 'input'
+                                    else:
+                                        var_type[symbol_name] = 'output'
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            if type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {s}')
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    var_type[symbol_name] = 'intermediate'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'component'
+                                    if opcode == '=':
+                                        component_name = dispatchExpression(expr)
+                                        if type(component_name) == CircomExpression1:
+                                            identifier = component_name.name
+                                            var_type[symbol_name] = identifier
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            if type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            var_type[symbol_name] = 'intermediate'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
+                return CircomTemplate(name, [], stmt, var_type)
             case ['templateDefinition', 'template', name, '(', arg, ')', block]:
                 stmt = []
+                var_type = {}
                 if arg[0] == 'identifierList':
                     arglst = list(a for a in arg[1:] if a != ',')
-                    if len(call) != 0 and call[0] == name:
-                        for i in range(1, len(call)):
-                            stmt.append(CircomDeclaration(0, arglst[i - 1], val=dispatchExpression(call[i])))
-                    else:
-                        for a in arg:
-                            stmt.append(CircomDeclaration(0, a))
                 for s in block[2:-1]:
-                    stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
-                return CircomTemplate(name, stmt)
+                    match s:
+                        case ['statement3', ['declaration', *_], ';']:
+                            match s[1]:
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    if type == 'input':
+                                        var_type[symbol_name] = 'input'
+                                    else:
+                                        var_type[symbol_name] = 'output'
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            if type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {s}')
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    var_type[symbol_name] = 'intermediate'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'component'
+                                    if opcode == '=':
+                                        component_name = dispatchExpression(expr)
+                                        if type(component_name) == CircomExpression1:
+                                            identifier = component_name.name
+                                            var_type[symbol_name] = identifier
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            if type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            var_type[symbol_name] = 'intermediate'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
+                return CircomTemplate(name, arglst, stmt, var_type)
             case _:
                 raise NotImplementedError(f'Not a template node: {node}')
+    
+    def to_compute(self):
+        string = f'''struct {self.name}_RESULT''' + ''' {'''
+        for var in list(self.var_type):
+            if self.var_type[var] == 'input' or self.var_type[var] == 'output':
+                string += f'''\n    int* {var};'''
+        string += '''\n};\n\n'''
+        string += f'''struct {self.name}_RESULT* {self.name}('''
+        if self.arg:
+            l = len(self.arg)
+            for i in range(0, l):
+                string += f'''const int {self.arg[i]}'''
+                if i != l - 1:
+                    string += ''', '''
+        string += ''') {\n'''
+        string += f'''    struct {self.name}_RESULT* result = (struct {self.name}_RESULT*)malloc(sizeof(struct {self.name}_RESULT));
+
+    '''
+            
+        return string
+    
+    def to_constraint(self):
+        return self.to_compute()
+
 
 class CircomStatement3(CircomNode):
-    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
+    def from_json(node, var_type={}):
         match node:
             case ['statement3', ['declaration', *_], ';']:
-                return CircomDeclaration.from_json(node[1], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
-            case ['statement3', ['statement', ['statement0', ['statement1', ['statement2', ['substition', *_], ';']]]]]:
-                return CircomSubstitution.from_json(node[1][1][1][1][1], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
-            case ['statement3', ['statement', ['statement0', ['statement1', constraint]]]]:
-                return CircomStatement2.from_json(constraint, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
+                return CircomDeclaration.from_json(node[1], var_type)
+            case ['statement3', ['statement', ['statement0', ['statement1', *_]]]]:
+                return CircomStatement1.from_json(node[1][1][1], var_type)
             case _:
                 raise NotImplementedError(f'Not a statement3 node: {node}')
 
+class CircomStatement1(CircomNode):
+    def from_json(node, var_type={}):
+        match node:
+            case ['statement1', 'if', *_]:
+                return CircomIf.from_json(node[1:], var_type)
+            case ['statement1', ['statement2', *_]]:
+                return CircomStatement2.from_json(node[1], var_type)
+            case ['statement2', *_]:
+                return CircomStatement2.from_json(node, var_type)
+            case _:
+                raise NotImplementedError(f'Not a statement1 node: {node}')
+
+class CircomIf(CircomNode):
+    def __init__(self, c1:CircomNode, c2:CircomNode, c3:CircomNode):
+        self.c1 = c1
+        self.c2 = c2
+        self.c3 = c3
+    
+    def from_json(node, var_type={}):
+        match node:
+            case ['if', '(', expression, ')', stmt1, ['parseElseStatement1', 'else', stmt2]]:
+                c1 = dispatchExpression(expression, var_type)
+                c2 = CircomStatement1.from_json(stmt1, var_type)
+                c3 = CircomStatement1.from_json(stmt2, var_type)
+                return [CircomIf(c1, c2, c3)]
+            case _:
+                raise NotImplementedError(f'Not an if node: {node}')
+    
+    def to_compute(self):
+        line = f'if {self.c1.to_c_code()}'
+        line += ''' {
+    '''
+        if isinstance(self.c2, list):
+            for stmt in self.c2:
+                line += '    '
+                line += stmt.to_compute()
+        else:
+            line += '    '
+            line += self.c2.to_compute()
+        line += '''} else {
+    '''
+        if isinstance(self.c3, list):
+            for stmt in self.c3:
+                line += '    '
+                line += stmt.to_compute()
+        else:
+            line += '    '
+            line += self.c3.to_compute()
+        line += '''}
+    '''
+
+        return line
+    
+    def to_constraint(self):
+        line = f'if {self.c1.to_c_code()}'
+        line += ''' {
+    '''
+        if isinstance(self.c2, list):
+            for stmt in self.c2:
+                line += '    '
+                line += stmt.to_constraint()
+        else:
+            line += '    '
+            line += self.c2.to_constraint()
+        line += '''} else {
+    '''
+        if isinstance(self.c3, list):
+            for stmt in self.c3:
+                line += '    '
+                line += stmt.to_constraint()
+        else:
+            line += '    '
+            line += self.c3.to_constraint()
+        line += '''}
+    '''
+
+        return line
+
 class CircomDeclaration(CircomNode):
     def __init__(self, type:int, name:str, arr:bool=False, size:str='', val:CircomNode=None):
-        self.type = type # 0 = input, 1 = output, 2 = var, 3 = intermediate signals
+        self.type = type # 0 = input, 1 = output, 2 = var, 3 = intermediate signals, 4 = component
         self.name = name
         self.arr = arr
         self.size = size
         self.val = val
     
-    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
+    def from_json(node, var_type={}):
         match node:
             case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', name]]]:
+                var_type[name] = type
                 if type == 'input':
-                    if return_input:
-                        input.append(name)
-                    if return_signal:
-                        signal.append(name)
-                    if return_private:
-                        private.append(name)
                     return [CircomDeclaration(0, name)]
                 else:
-                    if return_output:
-                        output.append(name)
-                    if return_signal:
-                        signal.append(name)
-                    if return_public:
-                        public.append(name)
                     return [CircomDeclaration(1, name)]
             case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', name]]]:
-                if return_signal:
-                    signal.append(name)
-                if return_intermediate:
-                    intermediate.append(name)
+                var_type[name] = 'intermediate'
                 return [CircomDeclaration(3, name)]
             case ['declaration', 'var', ['simpleSymbol', name]]:
-                if return_var:
-                    var.append(name)
+                var_type[name] = 'var'
                 return [CircomDeclaration(2, name)]
             case ['declaration', 'var', ['simpleSymbol', name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
                 if opcode == '=':
+                    var_type[name] = 'var'
                     rhs = dispatchExpression(expr)
-                    if return_var:
-                        var.append(name)
-                    return [CircomDeclaration(2, name, val=rhs)]
+                    return [CircomDeclaration(2, name, val=rhs.to_c_code())]
                 else:
                     raise NotImplementedError(f'Unhandled assignment: {node}')
+            case ['declaration', 'component', ['simpleSymbol', name]]:
+                var_type[name] = 'component'
+                return [CircomDeclaration(4, name)]
+            case ['declaration', 'component', ['simpleSymbol', name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                if opcode == '=':
+                    var_type[name] = 'component'
+                    rhs = dispatchExpression(expr)
+                    return [CircomDeclaration(4, name, val=rhs.to_c_code())]
+                else:
+                    raise NotImplementedError(f'Unhandled assignment: {node}')
+            case ['declaration', 'component', ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
+                var_type[name] = 'component'
+                size = dispatchExpression(expr)
+                return [CircomDeclaration(4, name, True, size.to_c_code())]
             case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
                 match arrdef:
                     case ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                        var_type[name] = type
                         size = dispatchExpression(expr)
                         if type == 'input':
-                            if return_input:
-                                input.append(name)
-                            if return_signal:
-                                signal.append(name)
-                            if return_private:
-                                private.append(name)
                             return [CircomDeclaration(0, name, True, size.to_c_code())]
                         else:
-                            if return_output:
-                                output.append(name)
-                            if return_signal:
-                                signal.append(name)
-                            if return_public:
-                                public.append(name)
                             return [CircomDeclaration(1, name, True, size.to_c_code())]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')
             case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
                 match arrdef:
                     case ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                        var_type[name] = 'intermediate'
                         size = dispatchExpression(expr)
-                        if return_signal:
-                            signal.append(name)
-                        if return_intermediate:
-                            intermediate.append(name)
                         return [CircomDeclaration(3, name, True, size.to_c_code())]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')
@@ -220,15 +402,15 @@ class CircomDeclaration(CircomNode):
                 raise NotImplementedError(f'Not a declaration node: {node}')
     def to_compute(self):
         if self.arr and self.type == 0:
-            return f'''int {self.name}[{self.size}];
-    klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
+            return f'''result->{self.name} = (int*)malloc(sizeof(int) * {self.size});
+    klee_make_symbolic(result->{self.name}, sizeof(int) * {self.size}, "{self.name}");
     for (int i=0; i<{self.size}; i++)
-        klee_assume({self.name}[i] >= 0);
+        klee_assume(result->{self.name}[i] >= 0);
 
     '''
         elif self.arr and self.type == 1:
-            return f'''int {self.name}[{self.size}];
-    klee_make_symbolic(&{self.name}, sizeof(int*), "{self.name}");
+            return f'''result->{self.name} = (int*)malloc(sizeof(int) * {self.size});
+    klee_make_symbolic(result->{self.name}, sizeof(int) * {self.size}, "{self.name}");
 
     '''
         elif self.arr and self.type == 3:
@@ -237,20 +419,20 @@ class CircomDeclaration(CircomNode):
 
     '''
         elif not self.arr and self.type == 0 and self.val is None:
-            return f'''int {self.name};
-    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
-    klee_assume({self.name} >= 0);
+            return f'''result->{self.name} = (int*)malloc(sizeof(int));
+    klee_make_symbolic(result->{self.name}, sizeof(int), "{self.name}");
+    klee_assume(*(result->{self.name}) >= 0);
 
     '''
         elif not self.arr and self.type == 0 and self.val is not None:
-            return f'''int {self.name};
-    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
-    klee_assume({self.name} == {self.val.to_c_code()});
+            return f'''result->{self.name} = (int*)malloc(sizeof(int));
+    klee_make_symbolic(result->{self.name}, sizeof(int), "{self.name}");
+    klee_assume(*(result->{self.name}) == {self.val});
 
     '''
         elif not self.arr and self.type == 1:
-            return f'''int {self.name};
-    klee_make_symbolic(&{self.name}, sizeof(int), "{self.name}");
+            return f'''result->{self.name} = (int*)malloc(sizeof(int));
+    klee_make_symbolic(result->{self.name}, sizeof(int), "{self.name}");
 
     '''
         elif not self.arr and self.type == 3:
@@ -263,8 +445,20 @@ class CircomDeclaration(CircomNode):
 
     '''
         elif self.type == 2 and self.val is not None:
-            return f'''int {self.name} = {self.val.to_c_code()};
+            return f'''int {self.name} = {self.val};
 
+    '''
+        elif self.type == 4 and self.arr:
+            return f'''void* {self.name}[{self.size}];
+
+    '''
+        elif self.type == 4 and not self.arr and self.val is None:
+            return f'''void* {self.name};
+
+    '''
+        elif self.type == 4 and not self.arr and self.val is not None:
+            return f'''void* {self.name};
+    {self.name} = {self.val};
     '''
 
     def to_constraint(self):
@@ -273,29 +467,35 @@ class CircomDeclaration(CircomNode):
     def to_c_code(self):
         if self.type != 2 or self.val is None:
             return ''
-        return f'int {self.name} = {self.val.to_c_code()}'
+        return f'int {self.name} = {self.val}'
 
 class CircomVar(CircomNode):
-    def __init__(self, label:str):
+    def __init__(self, label:str, var_type:dict={}):
         self.terminal = True
         self.label = label
+        self.var_type = var_type
     
     def to_c_code(self):
+        if self.var_type:
+            if self.label in list(self.var_type):
+                if self.var_type[self.label] == 'input' or self.var_type[self.label] == 'output':
+                    return f'''*(result->{self.label})'''
         return self.label
 
 class CircomInstruction(CircomNode):
-    def __init__(self, opcode:Opcode, op1:CircomNode=None, op2:CircomNode=None, op3:CircomNode=None):
+    def __init__(self, opcode:Opcode, op1:CircomNode=None, op2:CircomNode=None, op3:CircomNode=None, op4:CircomNode=None):
         self.terminal = False
         self.op1 = op1
         self.op2 = op2
         self.op3 = op3
+        self.op4 = op4
         self.opcode = opcode
 
 class CircomSubstitution(CircomInstruction):
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
+    def from_json(node, var_type):
         match node:
             case ['substition', ['expression', ['parseExpression1', lhs]], ['assignOp', opcode], ['expression', ['parseExpression1', rhs]]]:
                 op = None
@@ -308,8 +508,22 @@ class CircomSubstitution(CircomInstruction):
                         op = Opcode.ASSIGN_VAR
                     case _:
                         raise NotImplementedError(f'Unimplemented assign opcode in substitution node: {node}')
-                op1 = dispatchExpression(lhs)
-                op2 = dispatchExpression(rhs)
+                op1 = dispatchExpression(lhs, var_type)
+                op2 = dispatchExpression(rhs, var_type)
+                if opcode == '=':
+                    t = type(op1)
+                    if t == CircomVar:
+                        var = op1.label
+                        if var_type[var] == 'component':
+                            if type(op2) == CircomExpression1:
+                                identifier = op2.name
+                                var_type[var] = identifier
+                    if t == CircomListable:
+                        var = op1.op1.label
+                        if var_type[var] == 'component':
+                            if type(op2) == CircomExpression1:
+                                identifier = op2.name
+                                var_type[var] = identifier
                 return [CircomSubstitution(opcode=op, op1=op1, op2=op2)]
             case ['substition', ['expression', ['parseExpression1', lhs]], opcode]:
                 op = None
@@ -320,7 +534,7 @@ class CircomSubstitution(CircomInstruction):
                         op = Opcode.DECREMENT
                     case _:
                         raise NotImplementedError(f'Unimplemented opcode in substitution node: {node}')
-                op1 = dispatchExpression(lhs)
+                op1 = dispatchExpression(lhs, var_type)
                 return [CircomSubstitution(opcode=op, op1=op1, op2=None)]
             case ['substition', ['variable', name], opcode]:
                 op = None
@@ -331,10 +545,10 @@ class CircomSubstitution(CircomInstruction):
                         op = Opcode.DECREMENT
                     case _:
                         raise NotImplementedError(f'Unimplemented opcode in substitution node: {node}')
-                return [CircomSubstitution(opcode=op, op1=CircomVar(name), op2=None)]
+                return [CircomSubstitution(opcode=op, op1=CircomVar(name, var_type=var_type), op2=None)]
             case ['substition', ['expression', ['parseExpression1', lhs]], '==>', ['expression', ['parseExpression1', rhs]]]:
-                op1 = dispatchExpression(lhs)
-                op2 = dispatchExpression(rhs)
+                op1 = dispatchExpression(lhs, var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomSubstitution(opcode=Opcode.RIGHT_ASSIGN_CONSTRAINT_SIGNAL, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a substitution node: {node}')
@@ -381,6 +595,8 @@ class CircomSubstitution(CircomInstruction):
             return f'{self.op1.to_c_code()}++'
         elif self.opcode == Opcode.DECREMENT:
             return f'{self.op1.to_c_code()}--'
+        elif self.opcode == Opcode.ASSIGN_VAR:
+            return f'{self.op1.to_c_code()} = {self.op2.to_c_code()}'
 
 class CircomConstraintEq(CircomInstruction):
     def __init__(self, op1:CircomNode, op2:CircomNode):
@@ -424,40 +640,70 @@ class CircomStatement2(CircomInstruction):
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
     
-    def from_json(node, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate):
-        if node[2] == '===':
-            op1 = dispatchExpression(node[1][1][1])
-            op2 = dispatchExpression(node[3][1][1])
-            return [CircomConstraintEq(op1=op1, op2=op2)]
-        elif node[1] == 'for':
-            c1 = None
-            if node[3][0] == 'substition':
-                c1 = CircomSubstitution.from_json(node[3], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
-            elif node[3][0] == 'declaration':
-                c1 = CircomDeclaration.from_json(node[3], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
-            else:
-                raise NotImplementedError(f'Unhandled for condition: {node}')
-            c2 = dispatchExpression(node[5][1][1])
-            c3 = CircomSubstitution.from_json(node[7], return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate)
-            assert len(c1) == 1, f'error in for condition: {node}'
-            assert len(c3) == 1, f'error in for condition: {node}'
-            stmt = []
-            for s in node[9][1][2:-1]:
-                stmt.extend(CircomStatement3.from_json(s, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, input, output, signal, var, public, private, intermediate))
-            return [CircomFor(c1[0], c2, c3[0], stmt)]
-        else:
-            raise NotImplementedError(f'Not a statement 2 node: {node}')
+    def from_json(node, var_type={}):
+        match node:
+            case ['statement2', ['substition', *_], ';']:
+                return CircomSubstitution.from_json(node[1], var_type)
+            case ['statement2', ['block', *_]]:
+                stmt = []
+                for s in node[1][2:-1]:
+                    stmt.extend(CircomStatement3.from_json(s, var_type))
+                return CircomBlock.from_json(stmt)
+            case ['statement2', _, '===', _, ';']:
+                op1 = dispatchExpression(node[1][1][1], var_type)
+                op2 = dispatchExpression(node[3][1][1], var_type)
+                return [CircomConstraintEq(op1=op1, op2=op2)]
+            case ['statement2', 'for', *_]:
+                c1 = None
+                if node[3][0] == 'substition':
+                    c1 = CircomSubstitution.from_json(node[3], var_type)
+                elif node[3][0] == 'declaration':
+                    c1 = CircomDeclaration.from_json(node[3], var_type)
+                else:
+                    raise NotImplementedError(f'Unhandled for condition: {node}')
+                c2 = dispatchExpression(node[5][1][1], var_type)
+                c3 = CircomSubstitution.from_json(node[7], var_type)
+                assert len(c1) == 1, f'error in for condition: {node}'
+                assert len(c3) == 1, f'error in for condition: {node}'
+                stmt = []
+                if node[9][1][0] == 'block':
+                    for s in node[9][1][2:-1]:
+                        stmt.extend(CircomStatement3.from_json(s, var_type))
+                else:
+                    stmt.extend(CircomStatement2.from_json(node[9], var_type))
+                return [CircomFor(c1[0], c2, c3[0], stmt)]
+            case _:
+                raise NotImplementedError(f'Not a statement2 node: {node}')
+
+class CircomBlock(CircomNode):
+    def __init__(self, stmt:list[CircomNode]):
+        self.statement = stmt
+    
+    def from_json(stmt:list[CircomNode]):
+        return [CircomBlock(stmt)]
+    
+    def to_compute(self):
+        line = ''
+        for stmt in self.statement:
+            line += stmt.to_compute()
+        return line
+    
+    def to_constraint(self):
+        line = ''
+        for stmt in self.statement:
+            line += stmt.to_constraint()
+        return line
 
 class CircomTernary(CircomInstruction): # expression13
     def __init__(self, op1, op2, op3):
         super().__init__(opcode=Opcode.TERNARY, op1=op1, op2=op2, op3=op3)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression13', cond, '?', true, ':', false]:
-                op1 = dispatchExpression(cond)
-                op2 = dispatchExpression(true)
-                op3 = dispatchExpression(false)
+                op1 = dispatchExpression(cond, var_type)
+                op2 = dispatchExpression(true, var_type)
+                op3 = dispatchExpression(false, var_type)
                 return [CircomTernary(op1, op2, op3)]
             case _:
                 raise NotImplementedError(f'Not a ternary node: {node}')
@@ -472,14 +718,14 @@ class CircomOr(CircomInstruction): #expression12
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression12', *lhs, '||', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression12', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression12', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomOr(opcode=Opcode.OR, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an or node: {node}')
@@ -491,14 +737,14 @@ class CircomAnd(CircomInstruction): #expression11
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression11', *lhs, '&&', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression11', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression11', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomAnd(opcode=Opcode.AND, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an and node: {node}')
@@ -510,7 +756,7 @@ class CircomCompare(CircomInstruction): #expression10
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression10', *lhs, ['cmpOpCodes', opcode], rhs]:
                 op = None
@@ -528,10 +774,10 @@ class CircomCompare(CircomInstruction): #expression10
                     case '>=':
                         op = Opcode.GE
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression10', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression10', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomCompare(opcode=op, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a compare node: {node}')
@@ -556,14 +802,14 @@ class CircomOrBit(CircomInstruction): #expression9
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression9', *lhs, '|', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression9', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression9', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomOrBit(opcode=Opcode.OR_BIT, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an or bit node: {node}')
@@ -576,14 +822,14 @@ class CircomXorBit(CircomInstruction): #expression8
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression8', *lhs, '^', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression8', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression8', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomXorBit(opcode=Opcode.XOR_BIT, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an xor bit node: {node}')
@@ -595,14 +841,14 @@ class CircomAndBit(CircomInstruction): #expression7
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
     
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression7', *lhs, '&', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression7', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression7', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomAndBit(opcode=Opcode.AND_BIT, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not an and bit node: {node}')
@@ -614,7 +860,7 @@ class CircomShift(CircomInstruction): #expression6
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression6', *lhs, ['shiftOp', opcode], rhs]:
                 op = None
@@ -624,10 +870,10 @@ class CircomShift(CircomInstruction): #expression6
                     case '>>':
                         op = Opcode.SHIFTR
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression6', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression6', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomShift(opcode=op, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a shift node: {node}')
@@ -644,7 +890,7 @@ class CircomAddSub(CircomInstruction): #expression5
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
     
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression5', *lhs, ['addSubOp', opcode], rhs]:
                 op = None
@@ -654,10 +900,10 @@ class CircomAddSub(CircomInstruction): #expression5
                     case '-':
                         op = Opcode.MINUS
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression5', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression5', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomAddSub(opcode=op, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a add sub node: {node}')
@@ -674,7 +920,7 @@ class CircomMulDiv(CircomInstruction): #expression4
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression4', *lhs, ['mulDivOp', opcode], rhs]:
                 op = None
@@ -688,10 +934,10 @@ class CircomMulDiv(CircomInstruction): #expression4
                     case '%':
                         op = Opcode.MOD
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression4', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression4', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomMulDiv(opcode=op, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a mul div node: {node}')
@@ -703,7 +949,7 @@ class CircomMulDiv(CircomInstruction): #expression4
         elif self.opcode == Opcode.DIV:
             op_str = '/'
         elif self.opcode == Opcode.INTDIV:
-            op_str = '\\'
+            op_str = '/'
         elif self.opcode == Opcode.MOD:
             op_str = '%'
         return '(' + self.op1.to_c_code() + ' ' + op_str + ' ' + self.op2.to_c_code() + ')'
@@ -712,14 +958,14 @@ class CircomPow(CircomInstruction): #expression3
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
         super().__init__(opcode=opcode, op1=op1, op2=op2)
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression3', *lhs, '**', rhs]:
                 if len(lhs) == 1:
-                    op1 = dispatchExpression(lhs[0])
+                    op1 = dispatchExpression(lhs[0], var_type)
                 else:
-                    op1 = dispatchExpression(['expression3', *lhs])
-                op2 = dispatchExpression(rhs)
+                    op1 = dispatchExpression(['expression3', *lhs], var_type)
+                op2 = dispatchExpression(rhs, var_type)
                 return [CircomPow(opcode=Opcode.POW, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a pow node: {node}')
@@ -731,7 +977,7 @@ class CircomPrefix(CircomInstruction): #expression2
     def __init__(self, opcode:Opcode, op1:CircomNode):
         super().__init__(opcode=opcode, op1=op1)
         
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression2', ['expressionPrefixOp', opcode], rhs]:
                 op = None
@@ -742,7 +988,7 @@ class CircomPrefix(CircomInstruction): #expression2
                         op = Opcode.NOT
                     case '~':
                         op = Opcode.COMPLEMENT
-                op1 = dispatchExpression(rhs)
+                op1 = dispatchExpression(rhs, var_type)
                 return [CircomPrefix(opcode=op, op1=op1)]
             case _:
                 raise NotImplementedError(f'Not a prefix node: {node}')
@@ -757,29 +1003,122 @@ class CircomPrefix(CircomInstruction): #expression2
             op_str = '~'
         return '(' + ' ' + op_str + ' ' + self.op1.to_c_code() + ')'
 
-class CircomListable(CircomInstruction): #expression1
-    def __init__(self, op1:str, op2:str):
-        super().__init__(opcode=Opcode.ARR, op1=CircomVar(op1), op2=CircomVar(op2))
+class CircomListable(CircomInstruction):
+    def __init__(self, op1:str, op2:str, var_type:dict={}):
+        self.var_type = var_type
+        super().__init__(opcode=Opcode.ARR, op1=CircomVar(op1,var_type), op2=CircomVar(op2,var_type))
 
-    def from_json(node):
+    def from_json(node, var_type={}):
         print('In Listable')
 
     def to_c_code(self):
-        return f'{self.op1.label}[{self.op2.label}]'
+        if not self.op1.label in list(self.var_type):
+            return f'{self.op1.label}[{self.op2.label}]'
+        elif self.var_type[self.op1.label] == 'input' or self.var_type[self.op1.label] == 'output':
+            return f'result->{self.op1.label}[{self.op2.label}]'
+        else:
+            return f'{self.op1.label}[{self.op2.label}]'
+
+class CircomListableField(CircomInstruction):
+    def __init__(self, op1:str, op2:str, op3:str, var_type:dict={}):
+        self.var_type = var_type
+        super().__init__(opcode=Opcode.FIELD, op1=CircomVar(op1,var_type), op2=CircomVar(op2,var_type), op3=CircomVar(op3,var_type))
+
+    def from_json(node, var_type={}):
+        print('In ListableField')
+
+    def to_c_code(self):
+        assert self.var_type[self.op1.label], f'component not found error: {self.op1.label}'
+        return f'*(((struct {self.var_type[self.op1.label]}_RESULT*){self.op1.label}[{self.op2.label}])->{self.op3.label})'
+
+class CircomListableFieldListable(CircomInstruction):
+    def __init__(self, op1:str, op2:str, op3:str, op4:str, var_type:dict={}):
+        self.var_type = var_type
+        super().__init__(opcode=Opcode.ARR, op1=CircomVar(op1,var_type), op2=CircomVar(op2,var_type), op3=CircomVar(op3,var_type), op4=CircomVar(op4,var_type))
+
+    def from_json(node, var_type={}):
+        print('In ListableFieldListable')
+
+    def to_c_code(self):
+        assert self.var_type[self.op1.label], f'component not found error: {self.op1.label}'
+        return f'((struct {self.var_type[self.op1.label]}_RESULT*){self.op1.label}[{self.op2.label}])->{self.op3.label}[{self.op4.label}]'
+
+
+class CircomField(CircomInstruction):
+    def __init__(self, op1:str, op2:str, var_type:dict={}):
+        self.var_type = var_type
+        super().__init__(opcode=Opcode.FIELD, op1=CircomVar(op1,var_type), op2=CircomVar(op2,var_type))
+
+    def from_json(node, var_type={}):
+        print('In Field')
+
+    def to_c_code(self):
+        assert self.var_type[self.op1.label], f'component not found error: {self.op1.label}'
+        return f'*(((struct {self.var_type[self.op1.label]}_RESULT*){self.op1.label})->{self.op2.label})'
+
+class CircomFieldListable(CircomInstruction):
+    def __init__(self, op1:str, op2:str, op3:str, var_type:dict={}):
+        self.var_type = var_type
+        super().__init__(opcode=Opcode.ARR, op1=CircomVar(op1,var_type), op2=CircomVar(op2,var_type), op3=CircomVar(op3,var_type))
+
+    def from_json(node, var_type={}):
+        print('In FieldListable')
+
+    def to_c_code(self):
+        assert self.var_type[self.op1.label], f'component not found error: {self.op1.label}'
+        return f'((struct {self.var_type[self.op1.label]}_RESULT*){self.op1.label})->{self.op2.label}[{self.op3.label}]'
+
+
+class CircomExpression1(): #expression1
+    def __init__(self, name:str, para:CircomNode=None):
+        self.name = name
+        self.para = para
+
+    def from_json(node, var_type={}):
+        match node:
+            case ['expression1', name, '(', ')']:
+                return [CircomExpression1(name=name)]
+            case ['expression1', name, '(', expr,  ')']:
+                para = dispatchExpression(expr, var_type=var_type)
+                return [CircomExpression1(name=name, para=para)]
+            case _:
+                raise NotImplementedError(f'Not a expression1 node: {node}')
+    
+    def to_c_code(self):
+        if self.para:
+            return f'{self.name}({self.para.to_c_code()})'
+        else:
+            return f'{self.name}()'
+
 
 class CircomTerminal(CircomVar): #expression0
-    def from_json(node):
+    def from_json(node, var_type={}):
         match node:
             case ['expression0', ['variable', label]]:
-                return [CircomVar(label)]
+                return [CircomVar(label, var_type=var_type)]
             case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
-                idx = dispatchExpression(expr)
-                return [CircomListable(label, idx.to_c_code())]
+                idx = dispatchExpression(expr, var_type)
+                return [CircomListable(label, idx.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']], ['varAccess', ['componentAcc', '.', name]]]]:
+                idx = dispatchExpression(expr, var_type)
+                return [CircomListableField(label, idx.to_c_code(), name, var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']], ['varAccess', ['componentAcc', '.', name]], ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']]]]:
+                idx = dispatchExpression(expr, var_type)
+                idx2 = dispatchExpression(expr2, var_type)
+                return [CircomListableFieldListable(label, idx.to_c_code(), name, idx2.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['componentAcc', '.', name]]]]:
+                return [CircomField(label, name, var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['componentAcc', '.', name]], ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
+                idx = dispatchExpression(expr, var_type)
+                return [CircomFieldListable(label, name, idx.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
+                idx = dispatchExpression(expr, var_type)
+                return [CircomListable(label, idx.to_c_code(), var_type=var_type)]
             case ['expression0', i]:
                 assert isinstance(i, str), f'expression0 error: {i} in {node}'
                 if i.isdigit():
                     return [CircomVar(i)]
             case ['expression0', '(', ['expression', ['parseExpression1', expr]], ')']:
-                return [dispatchExpression(expr)]
+                return [dispatchExpression(expr, var_type)]
             case _:
                 raise NotImplementedError(f'Not a terminal node: {node}')
