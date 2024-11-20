@@ -9,7 +9,7 @@ from .backend.common import *
 from .backend.CircomType import CircomTemplate, CircomNode
 from antlr4 import FileStream
 
-def write(templates:list[CircomTemplate], main:list[CircomNode], file_name:str):
+def write(templates:list[CircomTemplate], main, file_name:str, call:list):
     compute = open(file_name + '_compute.c', 'w')
     constraint = open(file_name + '_constraint.c', 'w')
 
@@ -41,18 +41,19 @@ unsigned long long constant = 2188824287183927;
     if main:
         main_header = '''int main(int argc, char** argv) {
 
-        '''
+    '''
         compute.write(main_header)
         constraint.write(main_header)
 
-        # for s in main:
-        #     # print(f'writing: {s}')
-        #     compute.write(s.to_compute())
-        #     constraint.write(s.to_constraint())
+        for t in templates:
+            if main == t.name:
+                compute.write(t.to_main(call))
+                constraint.write(t.to_main(call))
+                break
 
         end = '''return 0;
-    }
-    '''
+}
+'''
         compute.write(end)
         constraint.write(end)
     compute.close()
@@ -96,16 +97,28 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
                 template_lst.append(CircomTemplate.from_json(definition))
             case ['mainComponent', 'component', 'main', '=', ['expression', ['parseExpression1', body]], ';']:
                 match body:
+                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ')']]]]]]]]]]]]:
+                        main_component = template
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
-                        call.append(template)
-                        call.append(expr)
+                        main_component = template
+                        match expr:
+                            case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
+                                call.append(num)
+                            case _:
+                                raise NotImplementedError(f'Unsupported argument for main function: {expr}')
             case ['mainComponent', 'component', 'main', ['publicList', '{', 'public', '[', arg, ']', '}'], '=', ['expression', ['parseExpression1', body]], ';']:
                 if arg[0] == 'identifierList':
                     arglst = list(a for a in arg[1:] if a != ',')
                 match body:
+                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ')']]]]]]]]]]]]:
+                        main_component = template
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
-                        call.append(template)
-                        call.append(expr)
+                        main_component = template
+                        match expr:
+                            case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
+                                call.append(num)
+                            case _:
+                                raise NotImplementedError(f'Unsupported argument for main function: {expr}')
             # other case
             # case _:
             #     print(i)
@@ -138,7 +151,7 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
             json.dump(data, json_file, indent=4)
 
     if return_c_files:
-        write(template_lst, main_component, file_name)
+        write(template_lst, main_component, file_name, call)
 
 def run():
     # invoke translator/circom/backend/translator.py with arguments
