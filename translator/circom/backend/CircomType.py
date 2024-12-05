@@ -46,12 +46,24 @@ class Opcode(Enum):
     DECREMENT = 43
     ARR = 44
     FIELD = 45
+    MUL_ASSIGN = 46
+    DIV_ASSIGN = 47
+    ADD_ASSIGN = 48
+    SUB_ASSIGN = 49
 
 def dispatchExpression(node, var_type:dict={}):
     if node[0] == 'expression0':
         ret = CircomTerminal.from_json(node, var_type)
+        if ret is None:
+            raise NotImplementedError(f'Unsupported expression0 node: {node}')
         assert len(ret) == 1, f'error in dispatch expression: {node}'
         return ret[0]
+    elif node[0] == 'listableExpression':
+        items = []
+        for item in node[1:]:
+            if item != ',':
+                items.append(dispatchExpression(item, var_type))
+        return items
     elif len(node) > 2:
         ret = []
         match node:
@@ -116,17 +128,30 @@ class CircomTemplate:
                 var_array = {}
                 for s in block[2:-1]:
                     match s:
+                        case ['statement3', ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', ['simpleSymbol', symbol_name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]]]]:
+                            if signal_type == 'input':
+                                var_type[symbol_name] = 'input'
+                            else:
+                                var_type[symbol_name] = 'output'
+                            var_array[symbol_name] = [
+                                dispatchExpression(expr1[1][1], var_type),
+                                dispatchExpression(expr2[1][1], var_type)
+                            ]
                         case ['statement3', ['declaration', *_], ';']:
                             match s[1]:
-                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
-                                    if type == 'input':
-                                        var_type[symbol_name] = 'input'
-                                    else:
-                                        var_type[symbol_name] = 'output'
-                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', arrdef]]:
                                     match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]:
+                                            if signal_type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                            var_array[symbol_name] = [
+                                                dispatchExpression(expr1[1][1], var_type),
+                                                dispatchExpression(expr2[1][1], var_type)
+                                            ]
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
-                                            if type == 'input':
+                                            if signal_type == 'input':
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
@@ -137,8 +162,13 @@ class CircomTemplate:
                                                     var_array[symbol_name] = num
                                                 case _:
                                                     raise NotImplementedError(f'Unsupported array size: {expr}')
-                                        case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                                        case ['simpleSymbol', symbol_name]:
+                                            if signal_type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                        case rrr:
+                                            raise NotImplementedError(f'Not an array declaration node: {rrr}')
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
                                     var_type[symbol_name] = 'intermediate'
                                 case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
@@ -170,19 +200,89 @@ class CircomTemplate:
                 var_array = {}
                 if arg[0] == 'identifierList':
                     arglst = list(a for a in arg[1:] if a != ',')
+                else:
+                    arglst = []
                 for s in block[2:-1]:
                     match s:
                         case ['statement3', ['declaration', *_], ';']:
                             match s[1]:
-                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
-                                    if type == 'input':
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    if signal_type == 'input':
                                         var_type[symbol_name] = 'input'
                                     else:
                                         var_type[symbol_name] = 'output'
-                                case ['declaration', ['signalHearder', 'signal', ['signalType', type]], ['signalSymbol', arrdef]]:
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', arrdef]]:
                                     match arrdef:
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
-                                            if type == 'input':
+                                            if signal_type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                            match expr:
+                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', ['variable', v]]]]]]]]]]]]]]:
+                                                    var_array[symbol_name] = v
+                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
+                                                    var_array[symbol_name] = num
+                                                case _:
+                                                    array_size = dispatchExpression(expr)
+                                                    var_array[symbol_name] = array_size.to_c_code()
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]:
+                                            if signal_type == 'input':
+                                                var_type[symbol_name] = 'input'
+                                            else:
+                                                var_type[symbol_name] = 'output'
+                                            var_array[symbol_name] = [
+                                                dispatchExpression(expr1[1][1], var_type),
+                                                dispatchExpression(expr2[1][1], var_type)
+                                            ]
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {arrdef}')
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    var_type[symbol_name] = 'intermediate'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'var', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'var'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name]]:
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
+                                    var_type[symbol_name] = 'component'
+                                    if opcode == '=':
+                                        component_name = dispatchExpression(expr)
+                                        if type(component_name) == CircomExpression1:
+                                            identifier = component_name.name
+                                            var_type[symbol_name] = identifier
+                                case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
+                                    var_type[symbol_name] = 'component'
+                                case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            var_type[symbol_name] = 'intermediate'
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
+                return CircomTemplate(name, arglst, stmt, var_type, var_array)
+            case ['functionDefinition', 'function', name, '(', arg, ')', block]:
+                stmt = []
+                var_type = {}
+                var_array = {}
+                if arg[0] == 'identifierList':
+                    arglst = list(a for a in arg[1:] if a != ',')
+                else:
+                    arglst = []
+                for s in block[2:-1]:
+                    match s:
+                        case ['statement3', ['declaration', *_], ';']:
+                            match s[1]:
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
+                                    if signal_type == 'input':
+                                        var_type[symbol_name] = 'input'
+                                    else:
+                                        var_type[symbol_name] = 'output'
+                                case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', arrdef]]:
+                                    match arrdef:
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
+                                            if signal_type == 'input':
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
@@ -219,6 +319,7 @@ class CircomTemplate:
                                         case _:
                                             raise NotImplementedError(f'Not an array declaration node: {node}')
                     stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
+                
                 return CircomTemplate(name, arglst, stmt, var_type, var_array)
             case _:
                 raise NotImplementedError(f'Not a template node: {node}')
@@ -292,6 +393,8 @@ class CircomStatement3(CircomNode):
                 return CircomDeclaration.from_json(node[1], var_type)
             case ['statement3', ['statement', ['statement0', ['statement1', *_]]]]:
                 return CircomStatement1.from_json(node[1][1][1], var_type)
+            case ['statement3', ['statement', ['statement0', ['stmt0NB', 'if', *_]]]]:
+                return CircomStatement1.from_json(['statement1', *node[1][1][1][1:]], var_type)
             case _:
                 raise NotImplementedError(f'Not a statement3 node: {node}')
 
@@ -320,6 +423,10 @@ class CircomIf(CircomNode):
                 c2 = CircomStatement1.from_json(stmt1, var_type)
                 c3 = CircomStatement1.from_json(stmt2, var_type)
                 return [CircomIf(c1, c2, c3)]
+            case ['if', '(', expression, ')', stmt1]:
+                c1 = dispatchExpression(expression, var_type)
+                c2 = CircomStatement1.from_json(stmt1, var_type)
+                return [CircomIf(c1, c2, None)]
             case _:
                 raise NotImplementedError(f'Not an if node: {node}')
     
@@ -334,16 +441,19 @@ class CircomIf(CircomNode):
         else:
             line += '    '
             line += self.c2.to_compute()
-        line += '''} else {
+        line += '''}'''
+        
+        if self.c3 is not None:
+            line += ''' else {
     '''
-        if isinstance(self.c3, list):
-            for stmt in self.c3:
+            if isinstance(self.c3, list):
+                for stmt in self.c3:
+                    line += '    '
+                    line += stmt.to_compute()
+            else:
                 line += '    '
-                line += stmt.to_compute()
-        else:
-            line += '    '
-            line += self.c3.to_compute()
-        line += '''}
+                line += self.c3.to_compute()
+            line += '''}
     '''
 
         return line
@@ -359,16 +469,19 @@ class CircomIf(CircomNode):
         else:
             line += '    '
             line += self.c2.to_constraint()
-        line += '''} else {
+        line += '''}'''
+        
+        if self.c3 is not None:
+            line += ''' else {
     '''
-        if isinstance(self.c3, list):
-            for stmt in self.c3:
+            if isinstance(self.c3, list):
+                for stmt in self.c3:
+                    line += '    '
+                    line += stmt.to_constraint()
+            else:
                 line += '    '
-                line += stmt.to_constraint()
-        else:
-            line += '    '
-            line += self.c3.to_constraint()
-        line += '''}
+                line += self.c3.to_constraint()
+            line += '''}
     '''
 
         return line
@@ -425,6 +538,14 @@ class CircomDeclaration(CircomNode):
                             return [CircomDeclaration(0, name, True, size.to_c_code())]
                         else:
                             return [CircomDeclaration(1, name, True, size.to_c_code())]
+                    case ['simpleSymbol', name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]:
+                        var_type[name] = type
+                        size1 = dispatchExpression(expr1[1][1])
+                        size2 = dispatchExpression(expr2[1][1])
+                        if type == 'input':
+                            return [CircomDeclaration(0, name, True, f"{size1.to_c_code()} * {size2.to_c_code()}")]
+                        else:
+                            return [CircomDeclaration(1, name, True, f"{size1.to_c_code()} * {size2.to_c_code()}")]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')
             case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
@@ -435,6 +556,47 @@ class CircomDeclaration(CircomNode):
                         return [CircomDeclaration(3, name, True, size.to_c_code())]
                     case _:
                         raise NotImplementedError(f'Not an array declaration node: {node}')
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']], ['tupleInitialization', opcode, ['expression', ['parseExpression1', init_expr]]]]:
+                if opcode == '=':
+                    var_type[name] = 'var'
+                    size = dispatchExpression(expr, var_type)
+                    init_val = dispatchExpression(init_expr, var_type)
+                    return [CircomDeclaration(2, name, True, size.to_c_code(), init_val)]
+            case ['declaration', 'component', ['simpleSymbol', name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]]:
+                var_type[name] = 'component'
+                size1 = dispatchExpression(expr1[1][1], var_type)
+                size2 = dispatchExpression(expr2[1][1], var_type)
+                return [CircomDeclaration(4, name, True, f"{size1.to_c_code()}*{size2.to_c_code()}")]
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']], ['tupleInitialization', opcode, ['expression', ['parseExpression1', init_expr]]]]:
+                if opcode == '=':
+                    var_type[name] = 'var'
+                    size1 = dispatchExpression(expr1[1][1], var_type)
+                    size2 = dispatchExpression(expr2[1][1], var_type)
+                    init_val = dispatchExpression(init_expr, var_type)
+                    return [CircomDeclaration(2, name, True, f"{size1.to_c_code()}*{size2.to_c_code()}", init_val)]
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr1]], ']'], ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']], ['tupleInitialization', opcode, ['expression', ['parseExpression1', init_expr]]]]:
+                if opcode == '=':
+                    var_type[name] = 'var'
+                    size1 = dispatchExpression(expr1, var_type)
+                    size2 = dispatchExpression(expr2, var_type)
+                    init_val = dispatchExpression(init_expr, var_type)
+                    return [CircomDeclaration(2, name, True, f"{size1.to_c_code()}*{size2.to_c_code()}", init_val)]
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:
+                var_type[name] = 'var'
+                size = dispatchExpression(expr, var_type)
+                return [CircomDeclaration(2, name, True, size.to_c_code())]
+            
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', expr, ']']]]:
+                var_type[name] = 'var'
+                size = dispatchExpression(expr[1][1], var_type)
+                return [CircomDeclaration(2, name, True, size.to_c_code())]
+            
+            case ['declaration', 'var', ['simpleSymbol', name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr1]], ']'], ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']]]:
+                var_type[name] = 'var'
+                size1 = dispatchExpression(expr1, var_type)
+                size2 = dispatchExpression(expr2, var_type)
+                return [CircomDeclaration(2, name, True, f"{size1.to_c_code()}*{size2.to_c_code()}")]
+            
             case _:
                 raise NotImplementedError(f'Not a declaration node: {node}')
     def to_compute(self):
@@ -534,6 +696,10 @@ class CircomSubstitution(CircomInstruction):
 
     def from_json(node, var_type):
         match node:
+            case ['substition', ['variable', var_name], '*=', ['expression', ['parseExpression1', expr]]]:
+                op1 = CircomVar(var_name, var_type=var_type)
+                op2 = dispatchExpression(expr, var_type)
+                return [CircomSubstitution(opcode=Opcode.MULTEQ, op1=op1, op2=op2)]
             case ['substition', ['expression', ['parseExpression1', lhs]], ['assignOp', opcode], ['expression', ['parseExpression1', rhs]]]:
                 op = None
                 match opcode:
@@ -562,6 +728,10 @@ class CircomSubstitution(CircomInstruction):
                                 identifier = op2.name
                                 var_type[var] = identifier
                 return [CircomSubstitution(opcode=op, op1=op1, op2=op2)]
+            case ['substition', ['expression', ['parseExpression1', lhs]], '-->', ['expression', ['parseExpression1', rhs]]]:
+                op1 = dispatchExpression(lhs, var_type)
+                op2 = dispatchExpression(rhs, var_type)
+                return [CircomSubstitution(opcode=Opcode.RIGHT_ASSIGN_SIGNAL, op1=op1, op2=op2)]
             case ['substition', ['expression', ['parseExpression1', lhs]], opcode]:
                 op = None
                 match opcode:
@@ -587,12 +757,20 @@ class CircomSubstitution(CircomInstruction):
                 op1 = dispatchExpression(lhs, var_type)
                 op2 = dispatchExpression(rhs, var_type)
                 return [CircomSubstitution(opcode=Opcode.RIGHT_ASSIGN_CONSTRAINT_SIGNAL, op1=op1, op2=op2)]
+            case ['substition', ['variable', var_name], '+=', ['expression', ['parseExpression1', expr]]]:
+                op1 = CircomVar(var_name, var_type=var_type)
+                op2 = dispatchExpression(expr, var_type)
+                return [CircomSubstitution(opcode=Opcode.ADD_ASSIGN, op1=op1, op2=op2)]
             case _:
                 raise NotImplementedError(f'Not a substitution node: {node}')
 
     def to_compute(self):
         line = ''
-        if self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL \
+        if self.opcode == Opcode.MULTEQ:
+            line = f'''{self.op1.to_c_code()} *= {self.op2.to_c_code()};
+
+    '''
+        elif self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL \
         or self.opcode == Opcode.ASSIGN_SIGNAL \
         or self.opcode == Opcode.RIGHT_ASSIGN_CONSTRAINT_SIGNAL:
             if isinstance(self.op2, CircomTernary):
@@ -607,22 +785,48 @@ class CircomSubstitution(CircomInstruction):
             line = f'''{self.op1.to_c_code()} = {self.op2.to_c_code()};
 
     '''
+        elif self.opcode == Opcode.MUL_ASSIGN:
+            line = f'''{self.op1.to_c_code()} *= {self.op2.to_c_code()};
+
+    '''
+        elif self.opcode == Opcode.DIV_ASSIGN:
+            line = f'''{self.op1.to_c_code()} /= {self.op2.to_c_code()};
+
+    '''
+        elif self.opcode == Opcode.ADD_ASSIGN:
+            line = f'''{self.op1.to_c_code()} += {self.op2.to_c_code()};
+
+    '''
+        elif self.opcode == Opcode.SUB_ASSIGN:
+            line = f'''{self.op1.to_c_code()} -= {self.op2.to_c_code()};
+
+    '''
+        elif self.opcode == Opcode.INCREMENT:
+            line = f'''{self.op1.to_c_code()}++;
+
+    '''
+        elif self.opcode == Opcode.DECREMENT:
+            line = f'''{self.op1.to_c_code()}--;
+
+    '''
         return line
     
     def to_constraint(self):
         line = ''
-        if self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL \
-        or self.opcode == Opcode.RIGHT_ASSIGN_CONSTRAINT_SIGNAL:
+        if self.opcode == Opcode.ASSIGN_CONSTRAINT_SIGNAL:
             if isinstance(self.op2, CircomTernary):
                 return self.op2.to_c_code(self.op1)
             elif isinstance(self.op2, CircomMulDiv) and self.op2.opcode == Opcode.DIV:
-                line = f'''klee_assume({self.op2.op2.to_c_code()} != 0);
+                line = f'''if ({self.op2.op2.to_c_code()} == 0) return 0;
     '''
-            line += f'''klee_assume({self.op1.to_c_code()} == {self.op2.to_c_code()});
+            line += f'''if ({self.op1.to_c_code()} != {self.op2.to_c_code()}) return 0;
 
     '''
-        elif self.opcode == Opcode.ASSIGN_VAR:
-            line = f'''{self.op1.to_c_code()} = {self.op2.to_c_code()};
+        elif self.opcode == Opcode.RIGHT_ASSIGN_CONSTRAINT_SIGNAL:
+            if isinstance(self.op2, CircomMulDiv) and self.op2.opcode == Opcode.DIV:
+                line = f'''if ({self.op2.op2.to_c_code()} == 0) return 0;
+    '''
+            line += f'''if ({self.op1.to_c_code()} != {self.op2.to_c_code()}) return 0;
 
     '''
         return line
@@ -634,6 +838,14 @@ class CircomSubstitution(CircomInstruction):
             return f'{self.op1.to_c_code()}--'
         elif self.opcode == Opcode.ASSIGN_VAR:
             return f'{self.op1.to_c_code()} = {self.op2.to_c_code()}'
+        elif self.opcode == Opcode.MUL_ASSIGN:
+            return f'{self.op1.to_c_code()} *= {self.op2.to_c_code()}'
+        elif self.opcode == Opcode.DIV_ASSIGN:
+            return f'{self.op1.to_c_code()} /= {self.op2.to_c_code()}'
+        elif self.opcode == Opcode.ADD_ASSIGN:
+            return f'{self.op1.to_c_code()} += {self.op2.to_c_code()}'
+        elif self.opcode == Opcode.SUB_ASSIGN:
+            return f'{self.op1.to_c_code()} -= {self.op2.to_c_code()}'
 
 class CircomConstraintEq(CircomInstruction):
     def __init__(self, op1:CircomNode, op2:CircomNode):
@@ -690,6 +902,15 @@ class CircomStatement2(CircomInstruction):
                 op1 = dispatchExpression(node[1][1][1], var_type)
                 op2 = dispatchExpression(node[3][1][1], var_type)
                 return [CircomConstraintEq(op1=op1, op2=op2)]
+            case ['statement2', 'while', '(', condition, ')', body]:
+                cond = dispatchExpression(condition[1][1], var_type)
+                stmt = []
+                if body[1][0] == 'block':
+                    for s in body[1][2:-1]:
+                        stmt.extend(CircomStatement3.from_json(s, var_type))
+                else:
+                    stmt.extend(CircomStatement2.from_json(body, var_type))
+                return [CircomWhile(cond, stmt)]
             case ['statement2', 'for', *_]:
                 c1 = None
                 if node[3][0] == 'substition':
@@ -709,6 +930,21 @@ class CircomStatement2(CircomInstruction):
                 else:
                     stmt.extend(CircomStatement2.from_json(node[9], var_type))
                 return [CircomFor(c1[0], c2, c3[0], stmt)]
+            case ['statement2', 'if', '(', condition, ')', true_stmt, 'else', false_stmt]:
+                cond = dispatchExpression(condition[1][1], var_type)
+                true_branch = CircomStatement2.from_json(true_stmt, var_type)
+                false_branch = CircomStatement2.from_json(false_stmt, var_type)
+                return [CircomIf(cond, true_branch, false_branch)]
+            case ['statement2', 'if', '(', condition, ')', true_stmt]:
+                cond = dispatchExpression(condition[1][1], var_type)
+                true_branch = CircomStatement2.from_json(true_stmt, var_type)
+                return [CircomIf(cond, true_branch, [])]
+            case ['statement2', 'return', expr, ';']:
+                ret_expr = dispatchExpression(expr[1][1], var_type)
+                return [CircomReturn(ret_expr)]
+            case ['statement2', 'assert', '(', condition, ')', ';']:
+                cond = dispatchExpression(condition[1][1], var_type)
+                return [CircomAssert(cond)]
             case _:
                 raise NotImplementedError(f'Not a statement2 node: {node}')
 
@@ -745,11 +981,14 @@ class CircomTernary(CircomInstruction): # expression13
             case _:
                 raise NotImplementedError(f'Not a ternary node: {node}')
 
-    def to_c_code(self, lhs:CircomNode):
-        return f'''if {self.op1.to_c_code()} klee_assume({lhs.to_c_code()} == {self.op2.to_c_code()});
+    def to_c_code(self, lhs=None):
+        if lhs is not None:
+            return f'''if {self.op1.to_c_code()} klee_assume({lhs.to_c_code()} == {self.op2.to_c_code()});
     else klee_assume({lhs.to_c_code()} == {self.op3.to_c_code()});
     
     '''
+        else:
+            return f'({self.op1.to_c_code()} ? {self.op2.to_c_code()} : {self.op3.to_c_code()})'
 
 class CircomOr(CircomInstruction): #expression12
     def __init__(self, opcode:Opcode, op1:CircomNode, op2:CircomNode):
@@ -1118,14 +1357,20 @@ class CircomExpression1(): #expression1
             case ['expression1', name, '(', expr,  ')']:
                 para = dispatchExpression(expr, var_type=var_type)
                 return [CircomExpression1(name=name, para=para)]
+            case ['expression1', '[', *list_expr, ']']:
+                list_items = [dispatchExpression(expr, var_type=var_type) for expr in list_expr if expr != ',']
+                return [CircomListExpression(list_items)]
             case _:
                 raise NotImplementedError(f'Not a expression1 node: {node}')
     
     def to_c_code(self):
-        if self.para:
-            return f'{self.name}({self.para.to_c_code()})'
-        else:
+        if self.para is None:
             return f'{self.name}()'
+        elif isinstance(self.para, list):
+            params = ', '.join(item.to_c_code() for item in self.para)
+            return f'{self.name}({params})'
+        else:
+            return f'{self.name}({self.para.to_c_code()})'
 
 
 class CircomTerminal(CircomVar): #expression0
@@ -1136,6 +1381,10 @@ class CircomTerminal(CircomVar): #expression0
             case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
                 idx = dispatchExpression(expr, var_type)
                 return [CircomListable(label, idx.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']], ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']]]]:
+                idx = dispatchExpression(expr, var_type)
+                idx2 = dispatchExpression(expr2, var_type)
+                return [CircomListable(label, f"{idx.to_c_code()}*N + {idx2.to_c_code()}", var_type=var_type)]
             case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']], ['varAccess', ['componentAcc', '.', name]]]]:
                 idx = dispatchExpression(expr, var_type)
                 return [CircomListableField(label, idx.to_c_code(), name, var_type=var_type)]
@@ -1151,11 +1400,97 @@ class CircomTerminal(CircomVar): #expression0
             case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]]:
                 idx = dispatchExpression(expr, var_type)
                 return [CircomListable(label, idx.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['componentAcc', '.', name]], ['varAccess', ['arrayAcc', '[', expr1, ']']], ['varAccess', ['arrayAcc', '[', expr2, ']']]]]:
+                idx1 = dispatchExpression(expr1[1][1], var_type)
+                idx2 = dispatchExpression(expr2[1][1], var_type)
+                return [CircomListableFieldListable(label, idx1.to_c_code(), name, idx2.to_c_code(), var_type=var_type)]
+            case ['expression0', ['variable', label, ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr1]], ']']], ['varAccess', ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']], ['varAccess', ['componentAcc', '.', field]]]]:
+                idx1 = dispatchExpression(expr1, var_type)
+                idx2 = dispatchExpression(expr2, var_type)
+                return [CircomListableField(label, f"{idx1.to_c_code()}*N + {idx2.to_c_code()}", field, var_type=var_type)]
             case ['expression0', i]:
                 assert isinstance(i, str), f'expression0 error: {i} in {node}'
                 if i.isdigit():
+                    return [CircomVar(i)]
+                elif i.startswith('0x'):
                     return [CircomVar(i)]
             case ['expression0', '(', ['expression', ['parseExpression1', expr]], ')']:
                 return [dispatchExpression(expr, var_type)]
             case _:
                 raise NotImplementedError(f'Not a terminal node: {node}')
+
+class CircomWhile(CircomNode):
+    def __init__(self, condition:CircomNode, stmt:list[CircomNode]):
+        self.condition = condition
+        self.statement = stmt
+    
+    def to_compute(self):
+        line = f'while ({self.condition.to_c_code()})'
+        line += ''' {
+    '''
+        for stmt in self.statement:
+            line += stmt.to_compute()
+        line += '''}
+
+    '''
+        return line
+    
+    def to_constraint(self):
+        line = f'while ({self.condition.to_c_code()})'
+        line += ''' {
+    '''
+        for stmt in self.statement:
+            line += stmt.to_constraint()
+        line += '''}
+
+    '''
+        return line
+
+class CircomReturn(CircomNode):
+    def __init__(self, expr:CircomNode):
+        self.expr = expr
+    
+    def to_compute(self):
+        return f'''return {self.expr.to_c_code()};
+
+    '''
+    
+    def to_constraint(self):
+        return ''
+    
+    def to_c_code(self):
+        return f'return {self.expr.to_c_code()}'
+
+class CircomAssert(CircomNode):
+    def __init__(self, condition:CircomNode):
+        self.condition = condition
+    
+    def to_compute(self):
+        return f'''if (!({self.condition.to_c_code()})) return 0;
+
+    '''
+    
+    def to_constraint(self):
+        return f'''klee_assert({self.condition.to_c_code()});
+        
+    '''
+
+class CircomListExpression(CircomNode):
+    def __init__(self, items: list[CircomNode]):
+        def flatten_item(item):
+            if isinstance(item, list):
+                if len(item) == 1:
+                    return flatten_item(item[0])
+                return [flatten_item(x) for x in item]
+            return item
+            
+        self.items = [flatten_item(item) for item in items]
+    
+    def to_c_code(self):
+        def item_to_str(item):
+            if isinstance(item, list):
+                return f"[{', '.join(item_to_str(x) for x in item)}]"
+            return item.to_c_code()
+            
+        items_str = ', '.join(item_to_str(item) for item in self.items)
+        return f'[{items_str}]'

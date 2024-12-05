@@ -4,10 +4,39 @@
 import argparse
 import sys
 import json
+import os
 
 from .backend.common import *
 from .backend.CircomType import CircomTemplate, CircomNode
 from antlr4 import FileStream
+
+def process_includes(json_tree, base_path, processed_files=None):
+    if processed_files is None:
+        processed_files = set()
+        
+    processed_tree = []
+    for node in json_tree:
+        if isinstance(node, list) and node[0] == 'include':
+            include_path = node[2].strip('"')
+            full_path = os.path.normpath(os.path.join(base_path, include_path))
+            
+            if full_path in processed_files:
+                continue
+                
+            processed_files.add(full_path)
+            
+            include_stream = FileStream(full_path, encoding='utf-8')
+            include_tree = tree2json(include_stream)
+            
+            include_tree = process_includes(include_tree, os.path.dirname(full_path), processed_files)
+            
+            for include_node in include_tree:
+                if isinstance(include_node, list) and include_node[0] == 'definition':
+                    processed_tree.append(include_node)
+        
+        elif isinstance(node, list):
+            processed_tree.append(node)
+    return processed_tree
 
 def write(templates:list[CircomTemplate], main, file_name:str, call:list):
     compute = open(file_name + '_compute.c', 'w')
@@ -60,6 +89,12 @@ unsigned long long constant = 2188824287183927;
     constraint.close()
 
 def translate(file_name, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, return_c_files):
+    input_stream = FileStream(file_name, encoding='utf-8')
+    json_tree = tree2json(input_stream)
+    
+    base_path = os.path.dirname(file_name)
+    json_tree = process_includes(json_tree, base_path)
+    
     input = []
     output = []
     signal = []
@@ -67,9 +102,7 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
     public = []
     private = []
     intermediate = []
-    input_stream = FileStream(file_name)
     
-    json_tree = tree2json(input_stream)
     template_lst = []
     call = []
 
@@ -81,7 +114,7 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
     #     match i:
     #         case ['mainComponent', 'component', 'main', '=', ['expression', ['parseExpression1', body]], ';']:
     #             match body:
-    #                 case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
+    #                 case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]:
     #                     main_component = template
     #         case ['mainComponent', 'component', 'main', ['publicList', '{', 'public', '[', arg, ']', '}'], '=', ['expression', ['parseExpression1', body]], ';']:
     #             match body:
