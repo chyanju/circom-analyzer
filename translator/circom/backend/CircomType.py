@@ -113,19 +113,15 @@ class CircomNode:
 
 
 class CircomTemplate:
-    def __init__(self, name:str, arg:list, stmt:list[CircomNode], var_type:dict, var_array:dict={}):
+    def __init__(self, name:str, arg:list, var_type:dict):
         self.name = name
         self.arg = arg
-        self.statement = stmt
         self.var_type = var_type
-        self.var_array = var_array
     
     def from_json(node):
         match node:
             case ['templateDefinition', 'template', name, '(', ')', block]:
-                stmt = []
                 var_type = {}
-                var_array = {}
                 for s in block[2:-1]:
                     match s:
                         case ['statement3', ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', ['simpleSymbol', symbol_name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]]]]:
@@ -133,10 +129,6 @@ class CircomTemplate:
                                 var_type[symbol_name] = 'input'
                             else:
                                 var_type[symbol_name] = 'output'
-                            var_array[symbol_name] = [
-                                dispatchExpression(expr1[1][1], var_type),
-                                dispatchExpression(expr2[1][1], var_type)
-                            ]
                         case ['statement3', ['declaration', *_], ';']:
                             match s[1]:
                                 case ['declaration', ['signalHearder', 'signal', ['signalType', signal_type]], ['signalSymbol', arrdef]]:
@@ -146,29 +138,18 @@ class CircomTemplate:
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                            var_array[symbol_name] = [
-                                                dispatchExpression(expr1[1][1], var_type),
-                                                dispatchExpression(expr2[1][1], var_type)
-                                            ]
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
                                             if signal_type == 'input':
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                            match expr:
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', ['variable', v]]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = v
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = num
-                                                case _:
-                                                    raise NotImplementedError(f'Unsupported array size: {expr}')
                                         case ['simpleSymbol', symbol_name]:
                                             if signal_type == 'input':
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                        case rrr:
-                                            raise NotImplementedError(f'Not an array declaration node: {rrr}')
+                                        case _:
+                                            raise NotImplementedError(f'Not an array declaration node!')
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
                                     var_type[symbol_name] = 'intermediate'
                                 case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
@@ -179,29 +160,19 @@ class CircomTemplate:
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
                                     var_type[symbol_name] = 'component'
-                                    if opcode == '=':
-                                        component_name = dispatchExpression(expr)
-                                        if type(component_name) == CircomExpression1:
-                                            identifier = component_name.name
-                                            var_type[symbol_name] = identifier
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
                                     match arrdef:
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
                                             var_type[symbol_name] = 'intermediate'
+                                        case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']'], ['arrayAcc', '[', ['expression', ['parseExpression1', expr2]], ']']]:
+                                            var_type[symbol_name] = 'intermediate'
                                         case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {node}')
-                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
-                return CircomTemplate(name, [], stmt, var_type, var_array)
+                                            raise NotImplementedError(f'Not an array declaration node! {arrdef} end node')
+                return CircomTemplate(name, [], var_type)
             case ['templateDefinition', 'template', name, '(', arg, ')', block]:
-                stmt = []
                 var_type = {}
-                var_array = {}
-                if arg[0] == 'identifierList':
-                    arglst = list(a for a in arg[1:] if a != ',')
-                else:
-                    arglst = []
                 for s in block[2:-1]:
                     match s:
                         case ['statement3', ['declaration', *_], ';']:
@@ -218,25 +189,13 @@ class CircomTemplate:
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                            match expr:
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', ['variable', v]]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = v
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = num
-                                                case _:
-                                                    array_size = dispatchExpression(expr)
-                                                    var_array[symbol_name] = array_size.to_c_code()
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', expr1, ']'], ['arrayAcc', '[', expr2, ']']]:
                                             if signal_type == 'input':
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                            var_array[symbol_name] = [
-                                                dispatchExpression(expr1[1][1], var_type),
-                                                dispatchExpression(expr2[1][1], var_type)
-                                            ]
                                         case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {arrdef}')
+                                            raise NotImplementedError(f'Not an array declaration node!')
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
                                     var_type[symbol_name] = 'intermediate'
                                 case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
@@ -247,11 +206,6 @@ class CircomTemplate:
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
                                     var_type[symbol_name] = 'component'
-                                    if opcode == '=':
-                                        component_name = dispatchExpression(expr)
-                                        if type(component_name) == CircomExpression1:
-                                            identifier = component_name.name
-                                            var_type[symbol_name] = identifier
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
@@ -259,17 +213,10 @@ class CircomTemplate:
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
                                             var_type[symbol_name] = 'intermediate'
                                         case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {node}')
-                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
-                return CircomTemplate(name, arglst, stmt, var_type, var_array)
+                                            raise NotImplementedError(f'Not an array declaration node!')
+                return CircomTemplate(name, [], var_type)
             case ['functionDefinition', 'function', name, '(', arg, ')', block]:
-                stmt = []
                 var_type = {}
-                var_array = {}
-                if arg[0] == 'identifierList':
-                    arglst = list(a for a in arg[1:] if a != ',')
-                else:
-                    arglst = []
                 for s in block[2:-1]:
                     match s:
                         case ['statement3', ['declaration', *_], ';']:
@@ -286,15 +233,8 @@ class CircomTemplate:
                                                 var_type[symbol_name] = 'input'
                                             else:
                                                 var_type[symbol_name] = 'output'
-                                            match expr:
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', ['variable', v]]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = v
-                                                case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
-                                                    var_array[symbol_name] = num
-                                                case _:
-                                                    raise NotImplementedError(f'Unsupported array size: {expr}')
                                         case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {node}')
+                                            raise NotImplementedError(f'Not an array declaration node!')
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', ['simpleSymbol', symbol_name]]]:
                                     var_type[symbol_name] = 'intermediate'
                                 case ['declaration', 'var', ['simpleSymbol', symbol_name]]:
@@ -305,11 +245,6 @@ class CircomTemplate:
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name], ['tupleInitialization', opcode, ['expression', ['parseExpression1', expr]]]]:
                                     var_type[symbol_name] = 'component'
-                                    if opcode == '=':
-                                        component_name = dispatchExpression(expr)
-                                        if type(component_name) == CircomExpression1:
-                                            identifier = component_name.name
-                                            var_type[symbol_name] = identifier
                                 case ['declaration', 'component', ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]]:    
                                     var_type[symbol_name] = 'component'
                                 case ['declaration', ['signalHearder', 'signal'], ['signalSymbol', arrdef]]:
@@ -317,12 +252,11 @@ class CircomTemplate:
                                         case ['simpleSymbol', symbol_name, ['arrayAcc', '[', ['expression', ['parseExpression1', expr]], ']']]:
                                             var_type[symbol_name] = 'intermediate'
                                         case _:
-                                            raise NotImplementedError(f'Not an array declaration node: {node}')
-                    stmt.extend(CircomStatement3.from_json(s, var_type=var_type))
+                                            raise NotImplementedError(f'Not an array declaration node!')
                 
-                return CircomTemplate(name, arglst, stmt, var_type, var_array)
+                return CircomTemplate(name, [], var_type)
             case _:
-                raise NotImplementedError(f'Not a template node: {node}')
+                raise NotImplementedError(f'Not a template node!')
     
     def to_compute(self):
         string = f'''struct {self.name}_RESULT''' + ''' {'''
@@ -347,44 +281,6 @@ class CircomTemplate:
     def to_constraint(self):
         return self.to_compute()
 
-    def to_main(self, call:list):
-        string = ''
-        if self.arg:
-            l = len(self.arg)
-            for i in range(0, l):
-                string += f'''const int {self.arg[i]} = {call[i]};
-    '''
-        string += f'''struct {self.name}_RESULT* template = {self.name}('''
-        if self.arg:
-            l = len(self.arg)
-            for i in range(0, l):
-                string += f'''{self.arg[i]}'''
-                if i != l - 1:
-                    string += ''', '''
-        string += ''');
-    '''
-        for var in list(self.var_type):
-            if self.var_type[var] == 'input' or self.var_type[var] == 'output':
-                if var in list(self.var_array):
-                    string += f'''int {var}[{self.var_array[var]}];
-    '''
-                    string += f'''klee_make_symbolic(&{var}, sizeof {var}, "{var}");
-    '''
-                    string += f'''for (int i = 0; i < {self.var_array[var]}; i++)'''
-                    string += ''' {
-    '''
-                    string += f'''    klee_assume(template->{var}[i] == {var}[i]);'''
-                    string += '''
-    }
-    '''
-                else:
-                    string += f'''int {var};
-    '''
-                    string += f'''klee_make_symbolic(&{var}, sizeof({var}), "{var}");
-    '''
-                    string += f'''klee_assume(*(template->{var}) == {var});
-    '''
-        return string
 
 class CircomStatement3(CircomNode):
     def from_json(node, var_type={}):

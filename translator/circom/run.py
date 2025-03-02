@@ -38,55 +38,17 @@ def process_includes(json_tree, base_path, processed_files=None):
             processed_tree.append(node)
     return processed_tree
 
-def write(templates:list[CircomTemplate], main, file_name:str, call:list):
-    compute = open(file_name + '_compute.c', 'w')
-    constraint = open(file_name + '_constraint.c', 'w')
+def write(templates:list[CircomTemplate], main, data:dict):
 
-    header = '''// AUTO GENERATED
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <klee/klee.h>
-unsigned long long constant = 2188824287183927;
-
-'''
-    compute.write(header)
-    constraint.write(header)
-
-    return_part = '''return result;
-}
-
-'''
-
-    for t in templates:
-        # print(f'writing: {s}')
-        compute.write(t.to_compute())
-        constraint.write(t.to_constraint())
-        for s in t.statement:
-            compute.write(s.to_compute())
-            constraint.write(s.to_constraint())
-        compute.write(return_part)
-        constraint.write(return_part)
     if main:
-        main_header = '''int main(int argc, char** argv) {
-
-    '''
-        compute.write(main_header)
-        constraint.write(main_header)
-
         for t in templates:
             if main == t.name:
-                compute.write(t.to_main(call))
-                constraint.write(t.to_main(call))
+                public_vars = []
+                for var, type in t.var_type.items():
+                    if type == 'output':
+                        public_vars.append('main.' + var)
+                data['public'] = public_vars
                 break
-
-        end = '''return 0;
-}
-'''
-        compute.write(end)
-        constraint.write(end)
-    compute.close()
-    constraint.close()
 
 def translate(file_name, return_input, return_output, return_signal, return_var, return_public, return_private, return_intermediate, return_c_files):
     input_stream = FileStream(file_name, encoding='utf-8')
@@ -134,24 +96,12 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
                         main_component = template
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
                         main_component = template
-                        match expr:
-                            case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
-                                call.append(num)
-                            case _:
-                                raise NotImplementedError(f'Unsupported argument for main function: {expr}')
             case ['mainComponent', 'component', 'main', ['publicList', '{', 'public', '[', arg, ']', '}'], '=', ['expression', ['parseExpression1', body]], ';']:
-                if arg[0] == 'identifierList':
-                    arglst = list(a for a in arg[1:] if a != ',')
                 match body:
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ')']]]]]]]]]]]]:
                         main_component = template
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
                         main_component = template
-                        match expr:
-                            case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', ['expression0', num]]]]]]]]]]]]]:
-                                call.append(num)
-                            case _:
-                                raise NotImplementedError(f'Unsupported argument for main function: {expr}')
             # other case
             # case _:
             #     print(i)
@@ -179,12 +129,14 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
     #     # output variables
     #     data['var'] = var
 
-    if data:
-        with open(file_name + '_info.json', 'w') as json_file:
-            json.dump(data, json_file, indent=4)
+    if return_public:
+        write(template_lst, main_component, data)
 
-    if return_c_files:
-        write(template_lst, main_component, file_name, call)
+    if data:
+        # write to json file (delete .circom extension and prefix) to circomlib_benchmarks/public_variables/
+        new_file_name = os.path.basename(file_name).replace('.circom', '_public_variables.json')
+        with open(f'circomlib_benchmarks/public_variables/{new_file_name}', 'w') as json_file:
+            json.dump(data, json_file, indent=4)
 
 def run():
     # invoke translator/circom/backend/translator.py with arguments
