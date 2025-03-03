@@ -39,7 +39,6 @@ def process_includes(json_tree, base_path, processed_files=None):
     return processed_tree
 
 def write(templates:list[CircomTemplate], main, data:dict):
-
     if main:
         for t in templates:
             if main == t.name:
@@ -94,17 +93,24 @@ def translate(file_name, return_input, return_output, return_signal, return_var,
                 match body:
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ')']]]]]]]]]]]]:
                         main_component = template
-                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
+                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', listable_expression, ')']]]]]]]]]]]]:
                         main_component = template
+                    case _:
+                        print(body)
+                        print('not matched')
             case ['mainComponent', 'component', 'main', ['publicList', '{', 'public', '[', arg, ']', '}'], '=', ['expression', ['parseExpression1', body]], ';']:
                 match body:
                     case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ')']]]]]]]]]]]]:
                         main_component = template
-                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', ['listableExpression', ['expression', ['parseExpression1', expr]]], ')']]]]]]]]]]]]:
+                    case ['expression12', ['expression11', ['expression10', ['expression9', ['expression8', ['expression7', ['expression6', ['expression5', ['expression4', ['expression3', ['expression2', ['expression1', template, '(', listable_expression, ')']]]]]]]]]]]]:
                         main_component = template
+                    case _:
+                        print(body)
+                        print('not matched')
             # other case
-            # case _:
-            #     print(i)
+            case _:
+                print(i)
+                print('not matched')
     
     data = {}
     # if return_public:
